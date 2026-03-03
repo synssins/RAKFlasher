@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - RAKFlasher</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">⚡ RAKFlasher</div>
+            <button class="menu-toggle">☰</button>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Dashboard</a></li>
+                    <li><a href="firmware.html">Firmware</a></li>
+                    <li><a href="recovery.html">Recovery</a></li>
+                    <li><a href="backup.html">Backup</a></li>
+                    <li><a href="serial.html">Serial</a></li>
+                    <li><a href="meshtastic.html">Meshtastic</a></li>
+                    <li><a href="settings.html">Settings</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="alert-container"></div>
+
+        <!-- WiFi Network Connection (STA) -->
+        <div class="card">
+            <h2 class="card-title">WiFi Network Connection</h2>
+            <p class="card-subtitle">Join an existing WiFi network for LAN access</p>
+
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-weight: 600;">Status:</span>
+                    <span id="sta-status-badge" class="status status-disconnected">Not configured</span>
+                </div>
+                <div id="sta-status-detail" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;"></div>
+            </div>
+
+            <div id="sta-config-fields">
+                <div class="form-group">
+                    <label class="form-label">Network</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <select id="sta-network-select" class="form-select" style="flex: 1;" onchange="onNetworkSelect()">
+                            <option value="">-- Select a network --</option>
+                            <option value="__manual__">Enter manually...</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="scanNetworks()" id="sta-scan-btn">Scan</button>
+                    </div>
+                </div>
+
+                <div class="form-group" id="sta-manual-group" style="display: none;">
+                    <label class="form-label">SSID (manual)</label>
+                    <input type="text" id="sta-manual-ssid" class="form-input" placeholder="Network name">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" id="sta-password" class="form-input" placeholder="Network password">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-check">
+                    <input type="checkbox" id="sta-clear" onchange="onSTAClearToggle()">
+                    <span style="color: var(--danger-color);">Disconnect and forget saved network</span>
+                </label>
+            </div>
+
+            <button class="btn btn-primary" id="sta-save-btn" onclick="saveSTASettings()">Connect</button>
+        </div>
+
+        <!-- WiFi Access Point Settings -->
+        <div class="card">
+            <h2 class="card-title">WiFi Access Point</h2>
+            <p class="card-subtitle">Configure WiFi AP settings (requires reboot)</p>
+
+            <div class="form-group">
+                <label class="form-label">SSID</label>
+                <input type="text" id="wifi-ssid" class="form-input" placeholder="RAKFlasher-XXXX">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" id="wifi-password" class="form-input" placeholder="Minimum 8 characters">
+            </div>
+
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label class="form-label">Channel</label>
+                    <select id="wifi-channel" class="form-select">
+                        <option value="1">Channel 1</option>
+                        <option value="6" selected>Channel 6</option>
+                        <option value="11">Channel 11</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-check">
+                        <input type="checkbox" id="wifi-hidden">
+                        <span>Hidden SSID</span>
+                    </label>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="saveWiFiSettings()">Save WiFi Settings</button>
+        </div>
+
+        <!-- GPIO Pin Configuration -->
+        <div class="card">
+            <h2 class="card-title">GPIO Pin Configuration</h2>
+            <p class="card-subtitle">Configure pin assignments for RAK communication</p>
+
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Function</th>
+                        <th>GPIO Pin</th>
+                        <th>Mode</th>
+                        <th>Active Level</th>
+                        <th>Test</th>
+                    </tr>
+                </thead>
+                <tbody id="pin-config-table">
+                    <!-- Populated dynamically -->
+                </tbody>
+            </table>
+
+            <button class="btn btn-primary" onclick="savePinConfig()">Save Pin Configuration</button>
+            <button class="btn btn-secondary" onclick="resetPinDefaults()">Reset to Defaults</button>
+        </div>
+
+        <!-- Serial Configuration -->
+        <div class="card">
+            <h2 class="card-title">Serial Configuration</h2>
+            <p class="card-subtitle">Configure serial communication with the RAK module</p>
+
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label class="form-label">Baud Rate</label>
+                    <select id="serial-baud" class="form-select">
+                        <option value="9600">9600</option>
+                        <option value="19200">19200</option>
+                        <option value="38400">38400</option>
+                        <option value="57600">57600</option>
+                        <option value="115200" selected>115200</option>
+                        <option value="230400">230400</option>
+                        <option value="460800">460800</option>
+                        <option value="921600">921600</option>
+                    </select>
+                    <small style="color: var(--text-secondary);">
+                        Meshtastic Serial Module defaults to 38400 (PROTO mode).
+                        Standard AT commands use 115200.
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Bridge Status</label>
+                    <div id="bridge-status-display">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span id="bridge-status-badge" class="status status-disconnected">Idle</span>
+                        </div>
+                        <div id="bridge-status-detail" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="saveBaudRate()">Save Baud Rate</button>
+                <button class="btn btn-secondary" onclick="refreshBridgeStatus()">Refresh Status</button>
+                <button class="btn btn-danger" id="bridge-disconnect-btn" style="display: none;" onclick="disconnectBridge()">Disconnect Bridge</button>
+            </div>
+
+            <div class="alert alert-info mt-2">
+                <strong>Serial Bridge:</strong> When a Meshtastic client connects via TCP (port 4403) or HTTP API,
+                the serial port is exclusively owned by the bridge. The serial monitor and backup functions
+                are suspended until the client disconnects.
+            </div>
+        </div>
+
+        <!-- System Settings -->
+        <div class="card">
+            <h2 class="card-title">System Settings</h2>
+
+            <div class="form-group">
+                <label class="form-label">Auto-Sleep Timeout (minutes)</label>
+                <input type="number" id="sleep-timeout" class="form-input" value="10" min="1" max="60">
+                <small style="color: var(--text-secondary);">Enter deep sleep after this many minutes of inactivity</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Serial Buffer Size (lines)</label>
+                <input type="number" id="serial-buffer" class="form-input" value="500" min="100" max="2000" step="100">
+                <small style="color: var(--text-secondary);">Number of serial lines to buffer in memory</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Max Backup Count</label>
+                <input type="number" id="max-backups" class="form-input" value="10" min="1" max="50">
+                <small style="color: var(--text-secondary);">Maximum number of backups to retain</small>
+            </div>
+
+            <button class="btn btn-primary" onclick="saveSystemSettings()">Save System Settings</button>
+        </div>
+
+        <!-- OTA Firmware Update -->
+        <div class="card">
+            <h2 class="card-title">ESP32 Firmware Update (OTA)</h2>
+            <p class="card-subtitle">Update the ESP32-RAKFlasher firmware and web UI in a single upload</p>
+
+            <div class="form-group">
+                <label class="form-label">Firmware File (.bin)</label>
+                <div class="file-upload" onclick="document.getElementById('ota-file').click()">
+                    <p id="ota-file-label">Click to select firmware.bin file</p>
+                    <input type="file" id="ota-file" accept=".bin" style="display:none"
+                           onchange="handleOTAFileSelect(event)">
+                </div>
+            </div>
+
+            <div id="ota-file-info" class="hidden">
+                <div class="alert alert-info">
+                    <strong>Selected:</strong> <span id="ota-filename"></span>
+                    (<span id="ota-filesize"></span>)
+                </div>
+            </div>
+
+            <div id="ota-progress-container" class="hidden mt-2">
+                <div class="progress-bar" id="ota-progress-wrapper" data-label="0%">
+                    <div class="progress-fill" id="ota-progress-bar" style="width: 0%;"></div>
+                </div>
+                <p id="ota-progress-text" style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);"></p>
+            </div>
+
+            <div id="ota-result" class="mt-2"></div>
+
+            <button class="btn btn-primary mt-2" id="ota-upload-btn" onclick="startOTAUpdate()" disabled>
+                Upload & Update Firmware
+            </button>
+
+            <div class="alert alert-info mt-2">
+                <strong>Note:</strong> The web UI is embedded in the firmware &mdash; a single
+                <code>firmware.bin</code> update includes everything.
+                The device will reboot after a successful update.
+                Do not disconnect power during the update process.
+            </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="card" style="border-left: 4px solid var(--danger-color);">
+            <h2 class="card-title" style="color: var(--danger-color);">Danger Zone</h2>
+
+            <div class="alert alert-danger">
+                <strong>⚠️ Warning:</strong> These actions cannot be undone!
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-danger" onclick="factoryReset()">
+                    🗑️ Factory Reset
+                </button>
+                <button class="btn btn-danger" onclick="formatFilesystem()">
+                    💾 Format Filesystem
+                </button>
+            </div>
+        </div>
+
+        <!-- About -->
+        <div class="card">
+            <h2 class="card-title">About RAKFlasher</h2>
+
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-label">Firmware Version</div>
+                    <div class="stat-value" style="font-size: 1.25rem;" id="about-version">--</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Build</div>
+                    <div class="stat-value" style="font-size: 1.25rem;" id="about-build-number">--</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Build Date</div>
+                    <div class="stat-value" style="font-size: 1.25rem;" id="about-build-date">--</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Free Storage</div>
+                    <div class="stat-value" style="font-size: 1.25rem;" id="about-storage">--</div>
+                </div>
+            </div>
+
+            <div class="mt-2">
+                <p><strong>ESP32-RAKFlasher</strong> - Remote firmware management system for RAK4631 modules</p>
+                <p style="margin-top: 0.5rem;">
+                    <a href="https://github.com/synssins/RAKFlasher" target="_blank" style="color: var(--primary-color);">
+                        GitHub Repository
+                    </a>
+                </p>
+            </div>
+        </div>
+
+        <!-- What's New / Changelog -->
+        <div class="card">
+            <h2 class="card-title">What's New</h2>
+
+            <div style="margin-bottom: 1.25rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--primary-color);">v1.2.3</h3>
+                <ul style="margin: 0; padding-left: 1.25rem; line-height: 1.8; font-size: 0.9rem;">
+                    <li>SWD turnaround speed fix &mdash; replaced slow <code>pinMode()</code> with fast GPIO register writes</li>
+                </ul>
+            </div>
+
+            <div style="margin-bottom: 1.25rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--primary-color);">v1.2.2</h3>
+                <ul style="margin: 0; padding-left: 1.25rem; line-height: 1.8; font-size: 0.9rem;">
+                    <li>&ldquo;Flash Last Backup&rdquo; button &mdash; restore firmware directly from device, no re-upload</li>
+                    <li>Fixed stale &ldquo;Operation completed&rdquo; alert showing when starting new operations</li>
+                    <li>Fixed Meshtastic command console duplicate polling / stuck busy state</li>
+                </ul>
+            </div>
+
+            <div style="margin-bottom: 1.25rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--primary-color);">v1.2.1</h3>
+                <ul style="margin: 0; padding-left: 1.25rem; line-height: 1.8; font-size: 0.9rem;">
+                    <li>SWD backup speed dramatically improved (NOP-based timing + higher task priority)</li>
+                    <li>Fixed download filename for SWD backups (was &ldquo;download&rdquo;, now proper .bin name)</li>
+                    <li>Fixed repeated success alerts after operations complete</li>
+                    <li>Real-time KB/s speed displayed during flash dump</li>
+                </ul>
+            </div>
+
+            <div style="margin-bottom: 1.25rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--primary-color);">v1.2.0</h3>
+                <ul style="margin: 0; padding-left: 1.25rem; line-height: 1.8; font-size: 0.9rem;">
+                    <li>Auto-incrementing build numbers for easy version tracking</li>
+                    <li>Changelog on settings page</li>
+                    <li>Build number visible on Dashboard and Settings</li>
+                </ul>
+            </div>
+
+            <div style="margin-bottom: 1.25rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--primary-color);">v1.1.0</h3>
+                <ul style="margin: 0; padding-left: 1.25rem; line-height: 1.8; font-size: 0.9rem;">
+                    <li>SWD firmware backup &amp; restore (full flash dump via SWD)</li>
+                    <li>Meshtastic command console with AT command support</li>
+                    <li>TCP serial bridge for Meshtastic client apps (port 4403)</li>
+                    <li>WiFi STA (client) mode &mdash; join existing networks</li>
+                    <li>OTA firmware updates (single .bin includes web UI)</li>
+                    <li>Configurable serial baud rate</li>
+                    <li>Complete SWD engine rewrite based on proven reference</li>
+                </ul>
+            </div>
+
+            <div>
+                <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--primary-color);">v1.0.0</h3>
+                <ul style="margin: 0; padding-left: 1.25rem; line-height: 1.8; font-size: 0.9rem;">
+                    <li>Initial release</li>
+                    <li>Serial DFU flashing, SWD recovery, WiFi AP</li>
+                    <li>Web UI with 6 pages, serial monitor, GPIO control</li>
+                    <li>Configuration backup/restore framework</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        const pinFunctions = ['Wake Signal', 'RAK Reset', 'UART TX', 'UART RX', 'SWD Clock', 'SWD Data'];
+        let currentPinConfig = {};
+
+        // STA state names matching the enum
+        const STA_STATE_NAMES = ['Disabled', 'Connecting', 'Connected', 'Disconnected', 'Failed'];
+        const STA_STATE_CLASSES = ['status-disconnected', 'status-warning', 'status-connected', 'status-error', 'status-error'];
+
+        // Load all settings
+        async function loadSettings() {
+            try {
+                const settings = await apiRequest('/api/settings');
+
+                // --- AP WiFi settings ---
+                if (settings.wifi) {
+                    document.getElementById('wifi-ssid').value = settings.wifi.ssid || '';
+                    document.getElementById('wifi-password').value = settings.wifi.password || '';
+                    if (settings.wifi.channel) {
+                        document.getElementById('wifi-channel').value = settings.wifi.channel;
+                    }
+                    document.getElementById('wifi-hidden').checked = !!settings.wifi.hidden;
+                }
+
+                // --- STA WiFi settings ---
+                if (settings.sta) {
+                    updateSTAStatus(settings.sta);
+                }
+
+                // --- System settings ---
+                if (settings.system) {
+                    document.getElementById('sleep-timeout').value = (settings.system.sleepTimeout / 60000) || 10;
+                    document.getElementById('serial-buffer').value = settings.system.serialBuffer || 500;
+                }
+
+                // --- Serial baud rate (from bridge status) ---
+                if (settings.baud) {
+                    document.getElementById('serial-baud').value = settings.baud;
+                }
+
+                // Load GPIO config
+                loadPinConfig();
+
+                // Load about info
+                const info = await apiRequest('/api/info');
+                document.getElementById('about-version').textContent = info.firmware || 'Unknown';
+                document.getElementById('about-build-number').textContent = '#' + (info.buildNumber || '?');
+                document.getElementById('about-build-date').textContent = info.buildDate || 'Unknown';
+                if (info.freeStorage !== undefined && info.totalStorage !== undefined) {
+                    document.getElementById('about-storage').textContent =
+                        formatBytes(info.freeStorage) + ' / ' + formatBytes(info.totalStorage);
+                }
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+            }
+        }
+
+        // Update STA status display
+        function updateSTAStatus(sta) {
+            const badge = document.getElementById('sta-status-badge');
+            const detail = document.getElementById('sta-status-detail');
+            const state = sta.state || 0;
+
+            // Remove all status classes
+            badge.className = 'status';
+            badge.classList.add(STA_STATE_CLASSES[state] || 'status-disconnected');
+
+            if (state === 2 && sta.connected) {
+                // Connected
+                badge.textContent = `Connected to ${sta.ssid}`;
+                detail.textContent = `IP: ${sta.ip}  |  Signal: ${sta.rssi} dBm`;
+            } else if (state === 1) {
+                badge.textContent = 'Connecting...';
+                detail.textContent = `Trying to connect to ${sta.ssid}`;
+            } else if (state === 3 || state === 4) {
+                badge.textContent = sta.ssid ? `${STA_STATE_NAMES[state]} (${sta.ssid})` : STA_STATE_NAMES[state];
+                detail.textContent = 'Will retry automatically';
+            } else if (sta.enabled && sta.ssid) {
+                badge.textContent = `Configured: ${sta.ssid}`;
+                detail.textContent = '';
+            } else {
+                badge.textContent = 'Not configured';
+                detail.textContent = 'Select a network below to connect';
+            }
+        }
+
+        // Scan for WiFi networks
+        async function scanNetworks() {
+            const btn = document.getElementById('sta-scan-btn');
+            const select = document.getElementById('sta-network-select');
+
+            btn.textContent = 'Scanning...';
+            btn.disabled = true;
+
+            try {
+                // Trigger scan
+                await apiPost('/api/wifi/scan', {});
+
+                // Poll for results
+                let attempts = 0;
+                const poll = setInterval(async () => {
+                    attempts++;
+                    try {
+                        const data = await apiRequest('/api/wifi/scan');
+                        if (!data.scanning || attempts > 20) {
+                            clearInterval(poll);
+                            btn.textContent = 'Scan';
+                            btn.disabled = false;
+
+                            // Populate dropdown
+                            const currentVal = select.value;
+                            select.innerHTML = '<option value="">-- Select a network --</option>';
+                            select.innerHTML += '<option value="__manual__">Enter manually...</option>';
+
+                            if (data.networks && data.networks.length > 0) {
+                                // Sort by signal strength
+                                data.networks.sort((a, b) => b.rssi - a.rssi);
+                                data.networks.forEach(net => {
+                                    const lock = net.encryption ? '🔒 ' : '';
+                                    const opt = document.createElement('option');
+                                    opt.value = net.ssid;
+                                    opt.textContent = `${lock}${net.ssid} (${net.rssi} dBm, Ch ${net.channel})`;
+                                    select.appendChild(opt);
+                                });
+                            }
+
+                            if (currentVal) select.value = currentVal;
+                        }
+                    } catch (e) {
+                        // Keep polling
+                    }
+                }, 1000);
+            } catch (error) {
+                btn.textContent = 'Scan';
+                btn.disabled = false;
+                showAlert('Failed to start WiFi scan', 'danger');
+            }
+        }
+
+        // Handle network dropdown selection
+        function onNetworkSelect() {
+            const val = document.getElementById('sta-network-select').value;
+            const manualGroup = document.getElementById('sta-manual-group');
+            manualGroup.style.display = (val === '__manual__') ? 'block' : 'none';
+        }
+
+        // Handle "Disconnect and forget" checkbox
+        function onSTAClearToggle() {
+            const checked = document.getElementById('sta-clear').checked;
+            const fields = document.getElementById('sta-config-fields');
+            const btn = document.getElementById('sta-save-btn');
+
+            fields.style.opacity = checked ? '0.4' : '1';
+            fields.style.pointerEvents = checked ? 'none' : 'auto';
+            btn.textContent = checked ? 'Disconnect & Forget' : 'Connect';
+            btn.className = checked ? 'btn btn-danger' : 'btn btn-primary';
+        }
+
+        // Save STA settings
+        async function saveSTASettings() {
+            const clearCheck = document.getElementById('sta-clear').checked;
+
+            if (clearCheck) {
+                // Clear STA settings
+                try {
+                    await apiPost('/api/settings', { sta: { clear: true } });
+                    showAlert('WiFi network disconnected and forgotten', 'success');
+                    document.getElementById('sta-clear').checked = false;
+                    onSTAClearToggle();
+                    setTimeout(loadSettings, 1000);
+                } catch (error) {
+                    showAlert('Failed to clear WiFi settings', 'danger');
+                }
+                return;
+            }
+
+            // Get SSID from dropdown or manual input
+            const selectVal = document.getElementById('sta-network-select').value;
+            const manualSSID = document.getElementById('sta-manual-ssid').value;
+            const ssid = (selectVal === '__manual__') ? manualSSID : selectVal;
+            const password = document.getElementById('sta-password').value;
+
+            if (!ssid) {
+                showAlert('Please select or enter a network name', 'danger');
+                return;
+            }
+
+            const btn = document.getElementById('sta-save-btn');
+            btn.textContent = 'Connecting...';
+            btn.disabled = true;
+
+            try {
+                await apiPost('/api/settings', { sta: { ssid, password } });
+                showAlert(`Connecting to "${ssid}"...`, 'info');
+
+                // Refresh status after connection attempt completes
+                setTimeout(async () => {
+                    btn.textContent = 'Connect';
+                    btn.disabled = false;
+                    await loadSettings();
+                }, 3000);
+            } catch (error) {
+                btn.textContent = 'Connect';
+                btn.disabled = false;
+                showAlert('Failed to save WiFi settings', 'danger');
+            }
+        }
+
+        // Load pin configuration
+        async function loadPinConfig() {
+            try {
+                const config = await apiRequest('/api/gpio/config');
+                currentPinConfig = config;
+
+                const tbody = document.getElementById('pin-config-table');
+                let html = '';
+
+                pinFunctions.forEach((func, i) => {
+                    const pin = config[i] || { gpio: 0, mode: 'INPUT', activeLevel: 'HIGH' };
+
+                    html += `
+                        <tr>
+                            <td><strong>${func}</strong></td>
+                            <td>
+                                <input type="number" class="form-input" style="width: 80px; padding: 0.25rem;"
+                                       id="pin-${i}-gpio" value="${pin.gpio}" min="0" max="48">
+                            </td>
+                            <td>
+                                <select class="form-select" style="padding: 0.25rem;" id="pin-${i}-mode">
+                                    <option value="INPUT" ${pin.mode === 'INPUT' ? 'selected' : ''}>Input</option>
+                                    <option value="OUTPUT" ${pin.mode === 'OUTPUT' ? 'selected' : ''}>Output</option>
+                                    <option value="INPUT_PULLUP" ${pin.mode === 'INPUT_PULLUP' ? 'selected' : ''}>Input Pull-up</option>
+                                    <option value="INPUT_PULLDOWN" ${pin.mode === 'INPUT_PULLDOWN' ? 'selected' : ''}>Input Pull-down</option>
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-select" style="padding: 0.25rem;" id="pin-${i}-level">
+                                    <option value="HIGH" ${pin.activeLevel === 'HIGH' ? 'selected' : ''}>HIGH</option>
+                                    <option value="LOW" ${pin.activeLevel === 'LOW' ? 'selected' : ''}>LOW</option>
+                                </select>
+                            </td>
+                            <td>
+                                <button class="btn btn-secondary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;"
+                                        onclick="testPin(${pin.gpio})">Test</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                tbody.innerHTML = html;
+            } catch (error) {
+                console.error('Failed to load pin config:', error);
+            }
+        }
+
+        // Save WiFi settings
+        async function saveWiFiSettings() {
+            const ssid = document.getElementById('wifi-ssid').value;
+            const password = document.getElementById('wifi-password').value;
+            const channel = parseInt(document.getElementById('wifi-channel').value);
+            const hidden = document.getElementById('wifi-hidden').checked;
+
+            if (ssid.length < 1) {
+                showAlert('SSID cannot be empty', 'danger');
+                return;
+            }
+
+            if (password.length < 8) {
+                showAlert('Password must be at least 8 characters', 'danger');
+                return;
+            }
+
+            try {
+                await apiPost('/api/settings', {
+                    wifi: { ssid, password, channel, hidden }
+                });
+
+                showAlert('WiFi settings saved. Please reboot for changes to take effect.', 'success');
+            } catch (error) {
+                showAlert('Failed to save WiFi settings', 'danger');
+            }
+        }
+
+        // Save pin configuration
+        async function savePinConfig() {
+            const config = {};
+
+            pinFunctions.forEach((func, i) => {
+                config[i] = {
+                    gpio: parseInt(document.getElementById(`pin-${i}-gpio`).value),
+                    mode: document.getElementById(`pin-${i}-mode`).value,
+                    activeLevel: document.getElementById(`pin-${i}-level`).value,
+                    function: func
+                };
+            });
+
+            try {
+                await apiPost('/api/gpio/config', config);
+                showAlert('Pin configuration saved successfully', 'success');
+            } catch (error) {
+                showAlert('Failed to save pin configuration', 'danger');
+            }
+        }
+
+        // Reset pin defaults
+        async function resetPinDefaults() {
+            if (confirm('Reset all pins to default configuration?')) {
+                loadPinConfig(); // Reload from defaults
+                showAlert('Pin configuration reset to defaults', 'info');
+            }
+        }
+
+        // Test pin
+        async function testPin(gpio) {
+            try {
+                const data = await apiRequest(`/api/gpio/test?gpio=${gpio}`);
+                showAlert(`GPIO${gpio} state: ${data.state}`, 'info');
+            } catch (error) {
+                showAlert('Pin test failed', 'danger');
+            }
+        }
+
+        // Save system settings
+        async function saveSystemSettings() {
+            const sleepTimeout = parseInt(document.getElementById('sleep-timeout').value) * 60000;
+            const serialBuffer = parseInt(document.getElementById('serial-buffer').value);
+            const maxBackups = parseInt(document.getElementById('max-backups').value);
+
+            try {
+                await apiPost('/api/settings', {
+                    system: { sleepTimeout, serialBuffer, maxBackups }
+                });
+
+                showAlert('System settings saved successfully', 'success');
+            } catch (error) {
+                showAlert('Failed to save system settings', 'danger');
+            }
+        }
+
+        // Factory reset
+        async function factoryReset() {
+            if (!confirm('Are you ABSOLUTELY SURE you want to perform a factory reset? This will erase ALL settings and data!')) {
+                return;
+            }
+
+            if (!confirm('This action cannot be undone. Continue with factory reset?')) {
+                return;
+            }
+
+            try {
+                await apiPost('/api/settings/factory', {});
+                showAlert('Factory reset initiated. Device will reboot...', 'warning');
+
+                setTimeout(() => {
+                    window.location.reload();
+                }, 5000);
+            } catch (error) {
+                showAlert('Factory reset failed', 'danger');
+            }
+        }
+
+        // Format filesystem
+        async function formatFilesystem() {
+            if (!confirm('Format filesystem? This will delete ALL stored files including backups!')) {
+                return;
+            }
+
+            showAlert('Filesystem format not yet implemented', 'info');
+        }
+
+        // --- OTA Update Functions ---
+        let otaFile = null;
+
+        function handleOTAFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const resultEl = document.getElementById('ota-result');
+            resultEl.innerHTML = '';
+
+            // Client-side size and name validation
+            const MAX_OTA_SIZE = 2 * 1024 * 1024; // ~2 MB max for firmware partition
+            if (file.size > MAX_OTA_SIZE) {
+                resultEl.innerHTML = '<div class="alert alert-danger">' +
+                    '<strong>File too large!</strong> OTA updates require <code>firmware.bin</code> (~1.8 MB). ' +
+                    'The selected file is ' + formatBytes(file.size) + '. ' +
+                    'The <code>combined.bin</code> image (~8 MB) is for initial USB flashing only.</div>';
+                document.getElementById('ota-upload-btn').disabled = true;
+                // Still show file info
+                document.getElementById('ota-filename').textContent = file.name;
+                document.getElementById('ota-filesize').textContent = formatBytes(file.size);
+                document.getElementById('ota-file-info').classList.remove('hidden');
+                document.getElementById('ota-file-label').textContent = file.name;
+                return;
+            }
+
+            if (file.name.indexOf('combined') >= 0 || file.name.indexOf('merged') >= 0) {
+                resultEl.innerHTML = '<div class="alert alert-danger">' +
+                    '<strong>Wrong file!</strong> This looks like a combined/merged image. ' +
+                    'Use <code>firmware.bin</code> for OTA updates.</div>';
+                document.getElementById('ota-upload-btn').disabled = true;
+                document.getElementById('ota-filename').textContent = file.name;
+                document.getElementById('ota-filesize').textContent = formatBytes(file.size);
+                document.getElementById('ota-file-info').classList.remove('hidden');
+                document.getElementById('ota-file-label').textContent = file.name;
+                return;
+            }
+
+            otaFile = file;
+            document.getElementById('ota-filename').textContent = file.name;
+            document.getElementById('ota-filesize').textContent = formatBytes(file.size);
+            document.getElementById('ota-file-info').classList.remove('hidden');
+            document.getElementById('ota-file-label').textContent = file.name;
+            document.getElementById('ota-upload-btn').disabled = false;
+        }
+
+        async function startOTAUpdate() {
+            if (!otaFile) return;
+
+            if (!confirm('Are you sure you want to update the ESP32 firmware? The device will reboot after the update.')) {
+                return;
+            }
+
+            const btn = document.getElementById('ota-upload-btn');
+            const progressContainer = document.getElementById('ota-progress-container');
+            const progressBar = document.getElementById('ota-progress-bar');
+            const progressText = document.getElementById('ota-progress-text');
+            const resultEl = document.getElementById('ota-result');
+
+            btn.disabled = true;
+            btn.textContent = 'Uploading...';
+            progressContainer.classList.remove('hidden');
+            resultEl.innerHTML = '';
+
+            let uploadComplete = false; // Track if 100% was reached
+
+            const formData = new FormData();
+            formData.append('firmware', otaFile, otaFile.name);
+
+            function showRebootMessage() {
+                resultEl.innerHTML = '<div class="alert alert-success">' +
+                    '<strong>Upload complete!</strong> Device is rebooting with new firmware...<br>' +
+                    'This page will auto-refresh in 30 seconds. If the device connects to your WiFi network, ' +
+                    'you may need to find its new IP address from your router.</div>';
+                progressText.textContent = 'Rebooting... please wait';
+                btn.textContent = 'Rebooting...';
+
+                // Auto-refresh after reboot
+                setTimeout(() => { window.location.reload(); }, 30000);
+            }
+
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.timeout = 60000; // 60s total timeout
+
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const pct = Math.round((e.loaded / e.total) * 100);
+                        progressBar.style.width = pct + '%';
+                        document.getElementById('ota-progress-wrapper').setAttribute('data-label', pct + '%');
+                        progressText.textContent = `Uploading: ${formatBytes(e.loaded)} / ${formatBytes(e.total)}`;
+
+                        if (pct >= 100) {
+                            uploadComplete = true;
+                            btn.textContent = 'Processing...';
+                            progressText.textContent = 'Upload complete — device is applying update...';
+                        }
+                    }
+                });
+
+                xhr.addEventListener('load', () => {
+                    if (xhr.status === 200) {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            if (data.success) {
+                                showRebootMessage();
+                            } else {
+                                resultEl.innerHTML = `<div class="alert alert-danger"><strong>Update failed:</strong> ${data.error || 'Unknown error'}</div>`;
+                                btn.disabled = false;
+                                btn.textContent = 'Upload & Update Firmware';
+                            }
+                        } catch (e) {
+                            // Got a response but couldn't parse — if upload was complete, assume success + reboot
+                            if (uploadComplete) {
+                                showRebootMessage();
+                            } else {
+                                resultEl.innerHTML = '<div class="alert alert-danger">Invalid response from server</div>';
+                                btn.disabled = false;
+                                btn.textContent = 'Upload & Update Firmware';
+                            }
+                        }
+                    } else {
+                        resultEl.innerHTML = `<div class="alert alert-danger">Upload failed with status ${xhr.status}</div>`;
+                        btn.disabled = false;
+                        btn.textContent = 'Upload & Update Firmware';
+                    }
+                });
+
+                xhr.addEventListener('error', () => {
+                    // If upload reached 100%, the device likely rebooted — this is expected!
+                    if (uploadComplete) {
+                        showRebootMessage();
+                    } else {
+                        resultEl.innerHTML = '<div class="alert alert-danger">Upload failed — network error</div>';
+                        btn.disabled = false;
+                        btn.textContent = 'Upload & Update Firmware';
+                    }
+                });
+
+                xhr.addEventListener('timeout', () => {
+                    if (uploadComplete) {
+                        showRebootMessage();
+                    } else {
+                        resultEl.innerHTML = '<div class="alert alert-danger">Upload timed out</div>';
+                        btn.disabled = false;
+                        btn.textContent = 'Upload & Update Firmware';
+                    }
+                });
+
+                xhr.open('POST', '/api/ota/update');
+                xhr.send(formData);
+            } catch (error) {
+                resultEl.innerHTML = `<div class="alert alert-danger">OTA update failed: ${error.message}</div>`;
+                btn.disabled = false;
+                btn.textContent = 'Upload & Update Firmware';
+            }
+        }
+
+        // Filesystem OTA removed — web UI is now embedded in firmware
+
+        // --- Serial Bridge Functions ---
+
+        // Save baud rate
+        async function saveBaudRate() {
+            const baud = parseInt(document.getElementById('serial-baud').value);
+            try {
+                await apiPost('/api/serial/baud', { baud });
+                showAlert(`Baud rate changed to ${baud}`, 'success');
+            } catch (error) {
+                showAlert('Failed to change baud rate: ' + error.message, 'danger');
+            }
+        }
+
+        // Refresh bridge status
+        async function refreshBridgeStatus() {
+            try {
+                const data = await apiRequest('/api/bridge/status');
+                updateBridgeStatus(data);
+            } catch (error) {
+                console.error('Failed to get bridge status:', error);
+            }
+        }
+
+        // Update bridge status display
+        function updateBridgeStatus(data) {
+            const badge = document.getElementById('bridge-status-badge');
+            const detail = document.getElementById('bridge-status-detail');
+            const disconnBtn = document.getElementById('bridge-disconnect-btn');
+
+            // Update baud rate display
+            if (data.baud) {
+                document.getElementById('serial-baud').value = data.baud;
+            }
+
+            badge.className = 'status';
+            if (data.mode === 'TCP') {
+                badge.classList.add('status-connected');
+                badge.textContent = 'TCP Bridge Active';
+                detail.textContent = `Client: ${data.client_ip || 'unknown'} | ${data.active_seconds || 0}s | TX: ${data.tx_bytes || 0} RX: ${data.rx_bytes || 0}`;
+                disconnBtn.style.display = 'inline-block';
+            } else if (data.mode === 'HTTP') {
+                badge.classList.add('status-warning');
+                badge.textContent = 'HTTP Bridge Active';
+                detail.textContent = `${data.active_seconds || 0}s | TX: ${data.tx_bytes || 0} RX: ${data.rx_bytes || 0}`;
+                disconnBtn.style.display = 'inline-block';
+            } else {
+                badge.classList.add('status-disconnected');
+                badge.textContent = 'Idle';
+                detail.textContent = 'No bridge clients connected';
+                disconnBtn.style.display = 'none';
+            }
+        }
+
+        // Disconnect bridge client
+        async function disconnectBridge() {
+            try {
+                await apiPost('/api/bridge/disconnect', {});
+                showAlert('Bridge client disconnected', 'success');
+                setTimeout(refreshBridgeStatus, 500);
+            } catch (error) {
+                showAlert('Failed to disconnect bridge', 'danger');
+            }
+        }
+
+        // Load settings on page load
+        loadSettings();
+        refreshBridgeStatus();
+    </script>
+</body>
+</html>

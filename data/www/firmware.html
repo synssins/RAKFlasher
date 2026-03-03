@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firmware Update - RAKFlasher</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">⚡ RAKFlasher</div>
+            <button class="menu-toggle">☰</button>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Dashboard</a></li>
+                    <li><a href="firmware.html">Firmware</a></li>
+                    <li><a href="recovery.html">Recovery</a></li>
+                    <li><a href="backup.html">Backup</a></li>
+                    <li><a href="serial.html">Serial</a></li>
+                    <li><a href="meshtastic.html">Meshtastic</a></li>
+                    <li><a href="settings.html">Settings</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="alert-container"></div>
+
+        <!-- Upload Firmware -->
+        <div class="card">
+            <h2 class="card-title">Upload Firmware</h2>
+            <p class="card-subtitle">Upload a Nordic DFU package (.zip) to flash to the RAK4631 module</p>
+
+            <div class="file-upload" id="upload-area" onclick="document.getElementById('firmware-file').click()">
+                <p>📦 Click or drag to upload firmware (.zip)</p>
+                <input type="file" id="firmware-file" accept=".zip" onchange="handleFileSelect(event)">
+            </div>
+
+            <div id="file-info" class="hidden mt-2">
+                <div class="alert alert-info">
+                    <strong>Selected file:</strong> <span id="filename"></span><br>
+                    <strong>Size:</strong> <span id="filesize"></span>
+                </div>
+
+                <div class="form-group">
+                    <div class="form-check">
+                        <input type="checkbox" id="backup-before" checked>
+                        <label for="backup-before">Backup settings before flashing</label>
+                    </div>
+                    <div class="form-check">
+                        <input type="checkbox" id="restore-after" checked>
+                        <label for="restore-after">Restore settings after flashing</label>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary btn-block" onclick="uploadFirmware()" id="upload-btn">
+                    Upload Firmware
+                </button>
+            </div>
+        </div>
+
+        <!-- Flash Progress -->
+        <div class="card hidden" id="progress-card">
+            <h3 class="card-title">Flashing Progress</h3>
+            <div class="progress" id="flash-progress-wrapper" data-label="0%">
+                <div class="progress-bar" id="flash-progress" style="width: 0%"></div>
+            </div>
+            <p id="flash-status" class="text-center mt-2">Initializing...</p>
+
+            <div class="terminal" id="flash-log"></div>
+        </div>
+
+        <!-- Flash Controls -->
+        <div class="card">
+            <h3 class="card-title">Flash Firmware</h3>
+            <p class="card-subtitle">Flash the uploaded firmware to RAK4631 via serial DFU</p>
+
+            <div id="no-firmware" class="alert alert-warning">
+                No firmware uploaded yet. Please upload a firmware package first.
+            </div>
+
+            <div id="firmware-ready" class="hidden">
+                <div class="alert alert-success">
+                    Firmware ready to flash. Ensure RAK4631 is in DFU mode.
+                </div>
+
+                <button class="btn btn-success btn-block" onclick="startFlashing()" id="flash-btn">
+                    🚀 Start Flashing
+                </button>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="card">
+            <h3 class="card-title">Instructions</h3>
+            <ol style="line-height: 2;">
+                <li>Ensure RAK4631 is connected and powered</li>
+                <li>Upload a Nordic DFU package (.zip file)</li>
+                <li>Click "Enter DFU Mode" on the dashboard to prepare the RAK module</li>
+                <li>Click "Start Flashing" to begin the firmware update</li>
+                <li>Wait for the process to complete (typically 1-3 minutes)</li>
+                <li>The RAK module will reboot automatically when complete</li>
+            </ol>
+
+            <div class="alert alert-info mt-2">
+                <strong>Tip:</strong> If flashing fails, try entering DFU mode manually by double-tapping the RAK reset button within 500ms.
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let selectedFile = null;
+
+        // Handle file selection
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!file.name.endsWith('.zip')) {
+                showAlert('Please select a .zip DFU package', 'danger');
+                return;
+            }
+
+            selectedFile = file;
+            document.getElementById('filename').textContent = file.name;
+            document.getElementById('filesize').textContent = formatBytes(file.size);
+            document.getElementById('file-info').classList.remove('hidden');
+        }
+
+        // Upload firmware
+        async function uploadFirmware() {
+            if (!selectedFile) return;
+
+            const uploadBtn = document.getElementById('upload-btn');
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+
+            try {
+                const formData = new FormData();
+                formData.append('firmware', selectedFile);
+
+                const response = await fetch('/api/firmware/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    showAlert('Firmware uploaded successfully!', 'success');
+                    checkFirmwareStatus();
+                } else {
+                    throw new Error('Upload failed');
+                }
+            } catch (error) {
+                showAlert('Upload failed: ' + error.message, 'danger');
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload Firmware';
+            }
+        }
+
+        // Check if firmware is uploaded
+        async function checkFirmwareStatus() {
+            try {
+                const data = await apiRequest('/api/firmware/info');
+                if (data.uploaded) {
+                    document.getElementById('no-firmware').classList.add('hidden');
+                    document.getElementById('firmware-ready').classList.remove('hidden');
+                }
+            } catch (error) {
+                // No firmware uploaded
+                document.getElementById('no-firmware').classList.remove('hidden');
+                document.getElementById('firmware-ready').classList.add('hidden');
+            }
+        }
+
+        // Start flashing
+        async function startFlashing() {
+            const flashBtn = document.getElementById('flash-btn');
+            flashBtn.disabled = true;
+
+            // Show progress card
+            document.getElementById('progress-card').classList.remove('hidden');
+
+            try {
+                // Backup settings if requested
+                if (document.getElementById('backup-before').checked) {
+                    addLog('Creating backup...');
+                    await apiPost('/api/backup/settings', {});
+                }
+
+                // Start flashing
+                addLog('Starting firmware flash...');
+                await apiPost('/api/firmware/flash', {});
+
+                addLog('Flashing completed successfully!');
+                updateProgress(100, 'Complete');
+                showAlert('Firmware flashed successfully!', 'success');
+
+                // Restore settings if requested
+                if (document.getElementById('restore-after').checked) {
+                    setTimeout(async () => {
+                        addLog('Restoring settings...');
+                        // Would restore from backup
+                    }, 2000);
+                }
+            } catch (error) {
+                addLog('ERROR: ' + error.message);
+                showAlert('Flashing failed: ' + error.message, 'danger');
+            } finally {
+                flashBtn.disabled = false;
+            }
+        }
+
+        // Handle progress events
+        window.addEventListener('progress', (e) => {
+            const { operation, progress, message } = e.detail;
+            if (operation === 'firmware_flash') {
+                updateProgress(progress, message);
+                addLog(message);
+            }
+        });
+
+        // Update progress bar
+        function updateProgress(percent, message) {
+            const progressBar = document.getElementById('flash-progress');
+            const statusText = document.getElementById('flash-status');
+
+            progressBar.style.width = percent + '%';
+            document.getElementById('flash-progress-wrapper').setAttribute('data-label', percent + '%');
+            statusText.textContent = message;
+        }
+
+        // Add log entry
+        function addLog(message) {
+            const log = document.getElementById('flash-log');
+            const line = document.createElement('div');
+            line.className = 'terminal-line';
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(line);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // Check status on load
+        checkFirmwareStatus();
+    </script>
+</body>
+</html>

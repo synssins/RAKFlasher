@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serial Monitor - RAKFlasher</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">⚡ RAKFlasher</div>
+            <button class="menu-toggle">☰</button>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Dashboard</a></li>
+                    <li><a href="firmware.html">Firmware</a></li>
+                    <li><a href="recovery.html">Recovery</a></li>
+                    <li><a href="backup.html">Backup</a></li>
+                    <li><a href="serial.html">Serial</a></li>
+                    <li><a href="meshtastic.html">Meshtastic</a></li>
+                    <li><a href="settings.html">Settings</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="alert-container"></div>
+
+        <!-- Serial Monitor Controls -->
+        <div class="card">
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="card-title" style="margin: 0;">Serial Monitor</h2>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="toggleDisplayMode()" id="mode-btn">
+                        Mode: HEX
+                    </button>
+                    <button class="btn btn-secondary" onclick="toggleAutoScroll()" id="autoscroll-btn">
+                        Auto-scroll: ON
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearMonitor()">
+                        Clear
+                    </button>
+                    <button class="btn btn-secondary" onclick="downloadLog()">
+                        Download
+                    </button>
+                </div>
+            </div>
+
+            <!-- Protocol Detection Banner -->
+            <div class="alert alert-info mb-2" id="proto-banner">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+                    <div style="flex: 1;">
+                        <strong>Protocol:</strong>
+                        <span id="proto-name" style="font-weight: bold; margin-left: 0.5rem;">Detecting...</span>
+                        <span id="proto-hint" style="display: block; font-size: 0.85rem; margin-top: 0.25rem;"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
+                        <select id="proto-select" class="form-select" onchange="onProtocolSelect()"
+                                style="padding: 0.25rem 0.5rem; font-size: 0.75rem; min-width: 140px;">
+                            <option value="0">Auto-detect</option>
+                            <option value="1">Meshtastic Protobuf</option>
+                            <option value="2">Nordic SLIP/DFU</option>
+                            <option value="3">NMEA GPS</option>
+                            <option value="4">AT Command</option>
+                            <option value="5">Text</option>
+                            <option value="6">Binary</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="redetectProtocol()"
+                                style="padding: 0.25rem 0.75rem; font-size: 0.75rem; white-space: nowrap;">
+                            Re-detect
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Passthrough Mode Toggle -->
+            <div class="flex items-center gap-2 mb-2">
+                <label class="form-check">
+                    <input type="checkbox" id="passthrough-mode" onchange="togglePassthrough()">
+                    <span>Passthrough Mode (bidirectional)</span>
+                </label>
+            </div>
+
+            <!-- Serial Output Terminal -->
+            <div class="terminal" id="serial-output"
+                 style="max-height: 500px; min-height: 300px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 0.8rem; letter-spacing: 0.02em;">
+                <!-- Serial data will appear here -->
+            </div>
+
+            <!-- Filter Controls -->
+            <div class="grid grid-2 mt-2">
+                <div class="form-group">
+                    <input type="text" id="filter-input" class="form-input"
+                           placeholder="Filter output (regex supported)" onkeyup="applyFilter()">
+                </div>
+                <div class="form-group">
+                    <select id="log-level" class="form-select" onchange="applyFilter()">
+                        <option value="all">All Messages</option>
+                        <option value="error">Errors Only</option>
+                        <option value="warning">Warnings+</option>
+                        <option value="info">Info+</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Command Input -->
+        <div class="card">
+            <h3 class="card-title">Send Command</h3>
+            <p class="card-subtitle">Send text commands or raw hex bytes to target device</p>
+
+            <div class="flex gap-2 mb-2">
+                <input type="text" id="command-input" class="form-input"
+                       placeholder="Enter command or hex bytes (e.g. 94 C3 00 02 18 01)..."
+                       onkeypress="handleCommandKey(event)" style="flex: 1;">
+                <button class="btn btn-primary" onclick="sendCommand()">Send</button>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <label class="form-check">
+                    <input type="checkbox" id="send-hex-mode">
+                    <span>Send as raw hex bytes</span>
+                </label>
+            </div>
+
+            <div class="mt-2">
+                <strong>Quick Commands:</strong>
+                <div class="btn-group mt-1">
+                    <button class="btn btn-secondary" onclick="sendQuickHex('94 C3 00 02 18 01')"
+                            title="Send Meshtastic want_config request">MT: want_config</button>
+                    <button class="btn btn-secondary" onclick="sendQuickCommand('info')">info</button>
+                    <button class="btn btn-secondary" onclick="sendQuickCommand('status')">status</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Serial Configuration -->
+        <div class="card">
+            <h3 class="card-title">Serial Configuration</h3>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-label">Baud Rate</div>
+                    <div class="stat-value" style="font-size: 1rem;">115200</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Data Bits</div>
+                    <div class="stat-value" style="font-size: 1rem;">8</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Parity</div>
+                    <div class="stat-value" style="font-size: 1rem;">None</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Stop Bits</div>
+                    <div class="stat-value" style="font-size: 1rem;">1</div>
+                </div>
+            </div>
+
+            <div class="alert alert-info mt-2">
+                Serial configuration can be changed in the <a href="settings.html" style="color: inherit; text-decoration: underline;">Settings</a> page.
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="card">
+            <h3 class="card-title">Serial Monitor Guide</h3>
+            <ul style="line-height: 2;">
+                <li><strong>HEX Mode:</strong> Shows binary data as hex dump — ideal for Meshtastic protobuf (PROTO) mode</li>
+                <li><strong>TEXT Mode:</strong> Shows printable ASCII text — ideal for text-based serial protocols</li>
+                <li><strong>Frame Detection:</strong> Meshtastic protobuf frames start with <code>94 C3</code> header bytes</li>
+                <li><strong>Send Hex:</strong> Check "Send as raw hex bytes" to send binary data (e.g. <code>94 C3 00 02 18 01</code>)</li>
+                <li><strong>Passthrough Mode:</strong> Enable bidirectional serial bridge for CLI access</li>
+                <li><strong>Download:</strong> Save the current buffer as a text file</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let autoScroll = true;
+        let serialBuffer = [];
+        let filterPattern = null;
+        let hexDisplayMode = true; // matches ESP32 default
+
+        // Protocol hint text for each detected protocol
+        const PROTO_HINTS = {
+            'Unknown': 'Waiting for data to identify protocol...',
+            'Meshtastic Protobuf': 'Binary protobuf frames — look for 94 C3 headers. Use HEX mode.',
+            'Nordic SLIP/DFU': 'SLIP-encoded DFU frames (0xC0 delimiters). Use HEX mode.',
+            'NMEA GPS': 'GPS sentences starting with $GP/$GN. TEXT mode recommended.',
+            'AT Command': 'AT command interface detected. TEXT mode recommended.',
+            'Text': 'Printable ASCII text. TEXT mode recommended.',
+            'Binary': 'Unknown binary data. HEX mode recommended.'
+        };
+
+        // Protocol ID → name mapping (matches SerialProtocol enum)
+        const PROTO_NAMES = {
+            0: 'Unknown',
+            1: 'Meshtastic Protobuf',
+            2: 'Nordic SLIP/DFU',
+            3: 'NMEA GPS',
+            4: 'AT Command',
+            5: 'Text',
+            6: 'Binary'
+        };
+
+        // Track whether user has manually overridden
+        let protoManualOverride = false;
+
+        // Update protocol banner
+        function updateProtocolDisplay(name, protoId) {
+            document.getElementById('proto-name').textContent = name || 'Unknown';
+            document.getElementById('proto-hint').textContent = PROTO_HINTS[name] || '';
+
+            // Sync dropdown if not manually overridden
+            if (!protoManualOverride && protoId !== undefined) {
+                document.getElementById('proto-select').value = protoId;
+            }
+        }
+
+        // Manual protocol selection from dropdown
+        async function onProtocolSelect() {
+            const select = document.getElementById('proto-select');
+            const protoId = parseInt(select.value);
+
+            try {
+                await apiPost('/api/serial/protocol', { protocol: protoId });
+
+                if (protoId === 0) {
+                    // Auto-detect mode — clear override flag
+                    protoManualOverride = false;
+                    updateProtocolDisplay('Detecting...');
+                    showAlert('Protocol detection reset to Auto', 'info');
+
+                    // Reload buffer after a moment to get new detection
+                    serialBuffer = [];
+                    renderSerialOutput();
+                    setTimeout(loadSerialBuffer, 2000);
+                } else {
+                    protoManualOverride = true;
+                    const name = PROTO_NAMES[protoId];
+                    updateProtocolDisplay(name, protoId);
+
+                    // Auto-switch hex mode based on protocol
+                    const hexProtos = [1, 2, 6]; // Meshtastic, SLIP, Binary
+                    const newHexMode = hexProtos.includes(protoId);
+                    if (newHexMode !== hexDisplayMode) {
+                        hexDisplayMode = newHexMode;
+                        document.getElementById('mode-btn').textContent =
+                            `Mode: ${hexDisplayMode ? 'HEX' : 'TEXT'}`;
+                        // Server already set hex mode via setProtocol, just sync UI
+                    }
+
+                    showAlert(`Protocol forced: ${name}`, 'info');
+
+                    // Reload buffer in new mode
+                    serialBuffer = [];
+                    renderSerialOutput();
+                    loadSerialBuffer();
+                }
+            } catch (e) {
+                showAlert('Failed to set protocol: ' + e.message, 'danger');
+            }
+        }
+
+        // Toggle display mode (HEX / TEXT)
+        async function toggleDisplayMode() {
+            hexDisplayMode = !hexDisplayMode;
+
+            document.getElementById('mode-btn').textContent =
+                `Mode: ${hexDisplayMode ? 'HEX' : 'TEXT'}`;
+
+            try {
+                await apiPost('/api/serial/hexmode', { enable: hexDisplayMode });
+            } catch (e) { /* continue */ }
+
+            // Clear and reload buffer in new mode
+            serialBuffer = [];
+            renderSerialOutput();
+            loadSerialBuffer();
+        }
+
+        // Re-detect protocol (clear buffer, reset detection)
+        async function redetectProtocol() {
+            protoManualOverride = false;
+            document.getElementById('proto-select').value = '0'; // Reset dropdown to Auto
+            updateProtocolDisplay('Detecting...');
+            serialBuffer = [];
+            renderSerialOutput();
+
+            try {
+                // Reset detection on ESP32
+                await apiPost('/api/serial/protocol', { protocol: 0 });
+                // Small delay then reload
+                setTimeout(loadSerialBuffer, 2000);
+            } catch (e) { /* ignore */ }
+
+            showAlert('Protocol detection reset — waiting for new data...', 'info');
+        }
+
+        // Toggle auto-scroll
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            document.getElementById('autoscroll-btn').textContent =
+                `Auto-scroll: ${autoScroll ? 'ON' : 'OFF'}`;
+        }
+
+        // Clear monitor
+        function clearMonitor() {
+            serialBuffer = [];
+            document.getElementById('serial-output').innerHTML = '';
+        }
+
+        // Download log
+        function downloadLog() {
+            const content = serialBuffer.map(item => `[${item.timestamp}] ${item.line}`).join('\n');
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `serial-log-${Date.now()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Toggle passthrough mode
+        async function togglePassthrough() {
+            const enabled = document.getElementById('passthrough-mode').checked;
+            try {
+                await apiPost('/api/serial/passthrough', { enable: enabled });
+                showAlert(`Passthrough mode ${enabled ? 'enabled' : 'disabled'}`, 'info');
+            } catch (error) {
+                document.getElementById('passthrough-mode').checked = !enabled;
+            }
+        }
+
+        // Send command (text or hex)
+        async function sendCommand() {
+            const input = document.getElementById('command-input');
+            const command = input.value.trim();
+            if (!command) return;
+
+            const isHex = document.getElementById('send-hex-mode').checked;
+
+            try {
+                if (isHex) {
+                    // Send raw hex bytes
+                    await apiPost('/api/serial/send', { hex: command }, { silent: true });
+                    addSerialLine(`TX> ${command}`, 'sent');
+                } else {
+                    await apiPost('/api/serial/send', { command }, { silent: true });
+                    addSerialLine(`> ${command}`, 'sent');
+                }
+                input.value = '';
+            } catch (error) {
+                showAlert('Failed to send: ' + error.message, 'danger');
+            }
+        }
+
+        // Send quick text command (sends directly, doesn't change hex checkbox)
+        async function sendQuickCommand(command) {
+            try {
+                await apiPost('/api/serial/send', { command }, { silent: true });
+                addSerialLine(`> ${command}`, 'sent');
+            } catch (error) {
+                showAlert('Failed to send: ' + error.message, 'danger');
+            }
+        }
+
+        // Send quick hex command (sends directly, doesn't change hex checkbox)
+        async function sendQuickHex(hex) {
+            try {
+                await apiPost('/api/serial/send', { hex }, { silent: true });
+                addSerialLine(`TX> ${hex}`, 'sent');
+            } catch (error) {
+                showAlert('Failed to send: ' + error.message, 'danger');
+            }
+        }
+
+        // Handle Enter key
+        function handleCommandKey(event) {
+            if (event.key === 'Enter') sendCommand();
+        }
+
+        // Apply filter
+        function applyFilter() {
+            const filterText = document.getElementById('filter-input').value;
+            try {
+                filterPattern = filterText ? new RegExp(filterText, 'i') : null;
+            } catch (e) {
+                filterPattern = null;
+            }
+            renderSerialOutput();
+        }
+
+        // Add serial line
+        function addSerialLine(line, type = 'received') {
+            serialBuffer.push({
+                line,
+                type,
+                timestamp: new Date().toLocaleTimeString()
+            });
+
+            // Limit buffer
+            if (serialBuffer.length > 1000) serialBuffer.shift();
+
+            renderSerialOutput();
+        }
+
+        // Render serial output
+        function renderSerialOutput() {
+            const output = document.getElementById('serial-output');
+            const logLevel = document.getElementById('log-level').value;
+
+            let html = '';
+
+            serialBuffer.forEach(item => {
+                if (filterPattern && !filterPattern.test(item.line)) return;
+
+                if (logLevel !== 'all') {
+                    const line = item.line.toLowerCase();
+                    if (logLevel === 'error' && !line.includes('error')) return;
+                    if (logLevel === 'warning' && !(line.includes('error') || line.includes('warning') || line.includes('warn'))) return;
+                    if (logLevel === 'info' && !(line.includes('error') || line.includes('warning') || line.includes('warn') || line.includes('info'))) return;
+                }
+
+                const isSent = item.type === 'sent';
+                const color = isSent ? 'color: #4CAF50;' : '';
+
+                // Highlight Meshtastic frame headers (94 C3) in hex mode
+                let displayLine = escapeHtml(item.line);
+                if (hexDisplayMode && !isSent) {
+                    displayLine = displayLine.replace(
+                        /94 C3/g,
+                        '<span style="color: #FF9800; font-weight: bold;">94 C3</span>'
+                    );
+                }
+
+                html += `<div class="terminal-line" style="${color}">[${item.timestamp}] ${displayLine}</div>`;
+            });
+
+            output.innerHTML = html || '<div class="terminal-line" style="color: #888;">Waiting for serial data...</div>';
+
+            if (autoScroll) {
+                output.scrollTop = output.scrollHeight;
+            }
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Handle WebSocket serial data
+        window.addEventListener('serialData', (e) => {
+            addSerialLine(e.detail);
+        });
+
+        // Load initial serial buffer
+        async function loadSerialBuffer() {
+            try {
+                const data = await apiRequest('/api/serial/buffer');
+                const lines = data.buffer.split('\n').filter(l => l.length > 0);
+
+                // Sync display mode with ESP32
+                if (data.hexMode !== undefined) {
+                    hexDisplayMode = data.hexMode;
+                    document.getElementById('mode-btn').textContent =
+                        `Mode: ${hexDisplayMode ? 'HEX' : 'TEXT'}`;
+                }
+
+                // Show detected protocol and sync dropdown
+                if (data.protocol) {
+                    const protoId = data.protocolId !== undefined ? data.protocolId : 0;
+                    updateProtocolDisplay(data.protocol, protoId);
+                }
+
+                lines.forEach(line => addSerialLine(line));
+            } catch (error) {
+                console.error('Failed to load serial buffer:', error);
+            }
+        }
+
+        // Load buffer on page load
+        loadSerialBuffer();
+    </script>
+</body>
+</html>

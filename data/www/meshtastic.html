@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meshtastic - RAKFlasher</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .cmd-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 0.4rem;
+        }
+        .cmd-grid .btn {
+            font-size: 0.75rem;
+            padding: 0.35rem 0.5rem;
+            white-space: nowrap;
+            text-align: center;
+        }
+        .cmd-grid .btn-danger {
+            background: #c62828;
+            color: #fff;
+            border-color: #c62828;
+        }
+        .cmd-grid .btn-danger:hover {
+            background: #e53935;
+        }
+        #mesh-output {
+            max-height: 500px;
+            min-height: 250px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.78rem;
+            letter-spacing: 0.02em;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        #mesh-output .frame-header {
+            color: #FF9800;
+            font-weight: bold;
+        }
+        #mesh-output .frame-field {
+            color: #81D4FA;
+        }
+        #mesh-output .frame-enum {
+            color: #A5D6A7;
+        }
+        #mesh-output .frame-error {
+            color: #EF5350;
+        }
+        #mesh-output .frame-separator {
+            color: #666;
+        }
+        #mesh-output .cmd-echo {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .help-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 0.2rem 1rem;
+            font-size: 0.82rem;
+        }
+        .help-grid code {
+            font-size: 0.78rem;
+            background: rgba(255,255,255,0.06);
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+        }
+        .help-grid .help-cmd { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">⚡ RAKFlasher</div>
+            <button class="menu-toggle">☰</button>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Dashboard</a></li>
+                    <li><a href="firmware.html">Firmware</a></li>
+                    <li><a href="recovery.html">Recovery</a></li>
+                    <li><a href="backup.html">Backup</a></li>
+                    <li><a href="serial.html">Serial</a></li>
+                    <li><a href="meshtastic.html">Meshtastic</a></li>
+                    <li><a href="settings.html">Settings</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="alert-container"></div>
+
+        <!-- Quick Actions -->
+        <div class="card">
+            <h2 class="card-title">Meshtastic Command Console</h2>
+            <p class="card-subtitle">Query and control Meshtastic device via protobuf serial API</p>
+
+            <div style="margin-bottom: 0.6rem;">
+                <strong style="font-size: 0.85rem;">Device Info</strong>
+            </div>
+            <div class="cmd-grid mb-2">
+                <button class="btn btn-primary" onclick="runCmd('get_metadata')">Device Info</button>
+                <button class="btn btn-primary" onclick="runCmd('get_owner')">Owner</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_all')">Full Dump</button>
+            </div>
+
+            <div style="margin-bottom: 0.6rem;">
+                <strong style="font-size: 0.85rem;">Config Sections</strong>
+            </div>
+            <div class="cmd-grid mb-2">
+                <button class="btn btn-secondary" onclick="runCmd('get_config',0)">Device</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_config',1)">Position</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_config',2)">Power</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_config',3)">Network</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_config',4)">Display</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_config',5)">LoRa</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_config',6)">Bluetooth</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_config',7)">Security</button>
+            </div>
+
+            <div style="margin-bottom: 0.6rem;">
+                <strong style="font-size: 0.85rem;">Module Config</strong>
+            </div>
+            <div class="cmd-grid mb-2">
+                <button class="btn btn-secondary" onclick="runCmd('get_module',0)">MQTT</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_module',1)">Serial</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_module',5)">Telemetry</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_module',3)">Store&Fwd</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_module',4)">Range Test</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_module',6)">Canned Msg</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_module',2)">Ext Notif</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_module',9)">Neighbor</button>
+            </div>
+
+            <div style="margin-bottom: 0.6rem;">
+                <strong style="font-size: 0.85rem;">Channels</strong>
+            </div>
+            <div class="cmd-grid mb-2">
+                <button class="btn btn-secondary" onclick="getAllChannels()">All Channels</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_channel',0)">Ch 0</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_channel',1)">Ch 1</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_channel',2)">Ch 2</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_channel',3)">Ch 3</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_channel',4)">Ch 4</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_channel',5)">Ch 5</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_channel',6)">Ch 6</button>
+                <button class="btn btn-secondary" onclick="runCmd('get_channel',7)">Ch 7</button>
+            </div>
+
+            <div style="margin-bottom: 0.6rem;">
+                <strong style="font-size: 0.85rem;">Actions</strong>
+            </div>
+            <div class="cmd-grid">
+                <button class="btn btn-danger" onclick="confirmAction('reboot','Reboot the Meshtastic device?')">Reboot</button>
+                <button class="btn btn-danger" onclick="confirmAction('factory_reset','FACTORY RESET? All settings will be erased!')">Factory Reset</button>
+                <button class="btn btn-danger" onclick="confirmAction('nodedb_reset','Reset the node database?')">NodeDB Reset</button>
+            </div>
+        </div>
+
+        <!-- Terminal Output -->
+        <div class="card">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="card-title" style="margin: 0;">Output</h3>
+                <div class="btn-group">
+                    <button class="btn btn-secondary" id="decode-toggle" onclick="toggleDecode()">Decoded</button>
+                    <button class="btn btn-secondary" onclick="clearOutput()">Clear</button>
+                    <button class="btn btn-secondary" onclick="downloadOutput()">Download</button>
+                </div>
+            </div>
+            <div class="terminal" id="mesh-output">
+                <span style="color: #888;">Ready. Click a button or type a command below.</span>
+            </div>
+        </div>
+
+        <!-- Command Input -->
+        <div class="card">
+            <h3 class="card-title">Command Input</h3>
+            <p class="card-subtitle">Type commands like <code>get lora</code>, <code>get channels</code>, <code>reboot</code>, or <code>help</code></p>
+            <div class="flex gap-2">
+                <input type="text" id="cmd-input" class="form-input"
+                       placeholder="get lora | get device | get channels | reboot | help"
+                       onkeypress="if(event.key==='Enter')runTextCmd()" style="flex: 1;">
+                <button class="btn btn-primary" onclick="runTextCmd()">Send</button>
+            </div>
+        </div>
+
+        <!-- Help Reference -->
+        <div class="card">
+            <h3 class="card-title">Command Reference</h3>
+            <div class="help-grid">
+                <div class="help-cmd"><code>get device</code></div>
+                <div>Device config (role, serial, buttons)</div>
+                <div class="help-cmd"><code>get position</code></div>
+                <div>Position config (GPS, fixed position)</div>
+                <div class="help-cmd"><code>get power</code></div>
+                <div>Power config (sleep, mesh SDS)</div>
+                <div class="help-cmd"><code>get network</code></div>
+                <div>Network config (WiFi, Ethernet)</div>
+                <div class="help-cmd"><code>get display</code></div>
+                <div>Display config (OLED, units)</div>
+                <div class="help-cmd"><code>get lora</code></div>
+                <div>LoRa config (region, modem, TX power)</div>
+                <div class="help-cmd"><code>get bluetooth</code></div>
+                <div>Bluetooth config (pairing, PIN)</div>
+                <div class="help-cmd"><code>get security</code></div>
+                <div>Security config (keys, admin channel)</div>
+                <div class="help-cmd"><code>get mqtt</code></div>
+                <div>MQTT module config</div>
+                <div class="help-cmd"><code>get serial</code></div>
+                <div>Serial module config</div>
+                <div class="help-cmd"><code>get telemetry</code></div>
+                <div>Telemetry module config</div>
+                <div class="help-cmd"><code>get owner</code></div>
+                <div>Node owner (name, ID, hardware)</div>
+                <div class="help-cmd"><code>get metadata</code></div>
+                <div>Device metadata (firmware, capabilities)</div>
+                <div class="help-cmd"><code>get channel N</code></div>
+                <div>Channel N config (0-7)</div>
+                <div class="help-cmd"><code>get channels</code></div>
+                <div>All 8 channels sequentially</div>
+                <div class="help-cmd"><code>get all</code></div>
+                <div>Full config dump (all sections)</div>
+                <div class="help-cmd"><code>reboot [N]</code></div>
+                <div>Reboot device (optional delay in seconds)</div>
+                <div class="help-cmd"><code>factory reset</code></div>
+                <div>Factory reset (erases all settings)</div>
+                <div class="help-cmd"><code>nodedb reset</code></div>
+                <div>Reset node database</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/meshtastic-decoder.js"></script>
+    <script>
+        let showDecoded = true;
+        let outputLines = [];
+        let pollTimer = null;
+        let busy = false;
+        let meshResumeHandled = false;   // Guard: only process completed state once
+        let meshPollingActive = false;   // Guard: don't start duplicate polling
+
+        // ── Auto-resume: check for active Meshtastic command on page load ──
+        window.addEventListener('activeOperations', (e) => {
+            const ops = e.detail || [];
+            const meshOp = ops.find(op => op.type === 'meshtastic');
+            if (!meshOp) return;
+
+            if (meshOp.running) {
+                meshResumeHandled = false;
+                if (!meshPollingActive) {
+                    meshPollingActive = true;
+                    busy = true;
+                    disableButtons(true);
+                    appendOutput('Reconnected — command still running...', 'frame-separator');
+                    startPolling();
+                }
+            } else if (meshOp.complete && !meshResumeHandled) {
+                meshResumeHandled = true;
+                // Command completed while away — fetch result
+                (async () => {
+                    try {
+                        const resp = await apiRequest('/api/meshtastic/command', { silent: true });
+                        if (resp.status === 'complete') {
+                            appendOutput('Result received (completed while away):', 'frame-separator');
+                            displayResult(resp);
+                        } else if (resp.status === 'error') {
+                            appendOutput('Error (completed while away): ' + (resp.error || 'Unknown'), 'frame-error');
+                        }
+                    } catch (e) { /* ignore */ }
+                })();
+            }
+        });
+
+        // Run a command via API
+        async function runCmd(command, type) {
+            if (busy) {
+                appendOutput('Command already running, please wait...', 'frame-error');
+                return;
+            }
+
+            const body = { command: command };
+            if (type !== undefined) body.type = type;
+
+            // Echo command
+            let label = command;
+            if (type !== undefined) label += ' ' + type;
+            appendOutput('> ' + label, 'cmd-echo');
+
+            busy = true;
+            disableButtons(true);
+
+            try {
+                const resp = await apiPost('/api/meshtastic/command', body, { silent: true });
+                if (resp.status === 'running') {
+                    appendOutput('Waiting for response...', 'frame-separator');
+                    meshPollingActive = true;   // Prevent activeOperations from duplicating
+                    meshResumeHandled = false;
+                    startPolling();
+                } else if (resp.error) {
+                    appendOutput('Error: ' + resp.error, 'frame-error');
+                    busy = false;
+                    meshPollingActive = false;
+                    disableButtons(false);
+                }
+            } catch (e) {
+                appendOutput('Request failed: ' + e.message, 'frame-error');
+                busy = false;
+                meshPollingActive = false;
+                disableButtons(false);
+            }
+        }
+
+        // Parse and run text command
+        function runTextCmd() {
+            const input = document.getElementById('cmd-input');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+
+            if (text.toLowerCase() === 'help') {
+                appendOutput('> help', 'cmd-echo');
+                appendOutput(MeshDecoder.getHelp(), '');
+                return;
+            }
+
+            if (text.toLowerCase() === 'clear') {
+                clearOutput();
+                return;
+            }
+
+            const parsed = MeshDecoder.parseCommand(text);
+            if (!parsed) {
+                appendOutput('> ' + text, 'cmd-echo');
+                appendOutput('Unknown command. Type "help" for available commands.', 'frame-error');
+                return;
+            }
+
+            // Handle special multi-command "get channels"
+            if (parsed.multi === 'channels') {
+                appendOutput('> ' + text, 'cmd-echo');
+                getAllChannels();
+                return;
+            }
+
+            runCmd(parsed.command, parsed.type);
+        }
+
+        // Get all 8 channels sequentially
+        async function getAllChannels() {
+            if (busy) {
+                appendOutput('Command already running, please wait...', 'frame-error');
+                return;
+            }
+            appendOutput('> get channels (0-7)', 'cmd-echo');
+
+            for (let i = 0; i < 8; i++) {
+                busy = true;
+                disableButtons(true);
+
+                try {
+                    const resp = await apiPost('/api/meshtastic/command',
+                        { command: 'get_channel', type: i }, { silent: true });
+                    if (resp.status === 'running') {
+                        await waitForResult();
+                    }
+                } catch (e) {
+                    appendOutput('Channel ' + i + ' failed: ' + e.message, 'frame-error');
+                }
+
+                // Small delay between requests
+                if (i < 7) await sleep(300);
+            }
+
+            busy = false;
+            disableButtons(false);
+        }
+
+        // Confirm dangerous action
+        function confirmAction(command, message) {
+            if (confirm(message)) {
+                runCmd(command);
+            }
+        }
+
+        // Poll for result
+        function startPolling() {
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = setInterval(checkResult, 500);
+        }
+
+        async function checkResult() {
+            try {
+                const resp = await apiRequest('/api/meshtastic/command', { silent: true });
+                if (resp.status === 'complete') {
+                    clearInterval(pollTimer);
+                    pollTimer = null;
+                    meshPollingActive = false;
+                    displayResult(resp);
+                    busy = false;
+                    disableButtons(false);
+                } else if (resp.status === 'error') {
+                    clearInterval(pollTimer);
+                    pollTimer = null;
+                    meshPollingActive = false;
+                    appendOutput('Error: ' + (resp.error || 'Unknown error'), 'frame-error');
+                    busy = false;
+                    disableButtons(false);
+                }
+                // else still running, keep polling
+            } catch (e) {
+                // Network error, keep trying
+            }
+        }
+
+        // Wait for result (used in sequential getAllChannels)
+        function waitForResult() {
+            return new Promise((resolve) => {
+                const check = setInterval(async () => {
+                    try {
+                        const resp = await apiRequest('/api/meshtastic/command', { silent: true });
+                        if (resp.status === 'complete') {
+                            clearInterval(check);
+                            displayResult(resp);
+                            resolve();
+                        } else if (resp.status === 'error') {
+                            clearInterval(check);
+                            appendOutput('Error: ' + (resp.error || 'Unknown error'), 'frame-error');
+                            resolve();
+                        }
+                    } catch (e) { /* keep trying */ }
+                }, 500);
+
+                // Timeout after 15s
+                setTimeout(() => {
+                    clearInterval(check);
+                    appendOutput('Timeout waiting for response', 'frame-error');
+                    resolve();
+                }, 15000);
+            });
+        }
+
+        // Display result from API
+        function displayResult(resp) {
+            // Show error messages from ESP32
+            if (resp.error) {
+                appendOutput('Error: ' + resp.error, 'frame-error');
+                return;
+            }
+
+            if (resp.command === 'get_all' && resp.config) {
+                // Full config dump returns JSON directly
+                appendOutput('--- Full Config Dump ---', 'frame-header');
+                appendOutput(JSON.stringify(resp.config, null, 2), '');
+                return;
+            }
+
+            // Show myNodeNum if available
+            if (resp.myNodeNumHex) {
+                appendOutput('Node: ' + resp.myNodeNumHex, 'frame-separator');
+            }
+
+            const frames = resp.frames || [];
+            if (frames.length === 0) {
+                if (resp.sent === false) {
+                    appendOutput('Failed to send command frame', 'frame-error');
+                } else {
+                    appendOutput('No response frames received (device may not have responded)', 'frame-error');
+                }
+                return;
+            }
+
+            appendOutput('--- ' + frames.length + ' frame(s) received ---', 'frame-separator');
+
+            frames.forEach((frame, idx) => {
+                if (showDecoded && typeof MeshDecoder !== 'undefined') {
+                    try {
+                        const decoded = MeshDecoder.formatFrame(frame);
+                        appendOutput(decoded, '');
+                    } catch (e) {
+                        // Fallback to raw
+                        appendOutput('[Frame ' + idx + '] type=' + frame.type +
+                            (frame.subType ? ' sub=' + frame.subType : '') +
+                            ' len=' + frame.len, 'frame-header');
+                        appendOutput(frame.hex, '');
+                    }
+                } else {
+                    appendOutput('[Frame ' + idx + '] type=' + frame.type +
+                        (frame.subType ? ' sub=' + frame.subType : '') +
+                        ' len=' + frame.len, 'frame-header');
+                    appendOutput(frame.hex, '');
+                }
+            });
+        }
+
+        // Toggle decode mode
+        function toggleDecode() {
+            showDecoded = !showDecoded;
+            document.getElementById('decode-toggle').textContent =
+                showDecoded ? 'Decoded' : 'Raw';
+        }
+
+        // Append to output terminal
+        function appendOutput(text, className) {
+            const el = document.getElementById('mesh-output');
+
+            // Clear placeholder on first real output
+            if (outputLines.length === 0) {
+                el.innerHTML = '';
+            }
+
+            outputLines.push({ text, className });
+
+            // Limit buffer
+            if (outputLines.length > 2000) {
+                outputLines = outputLines.slice(-1500);
+                // Re-render
+                el.innerHTML = '';
+                outputLines.forEach(line => {
+                    const div = document.createElement('div');
+                    div.className = 'terminal-line' + (line.className ? ' ' + line.className : '');
+                    div.textContent = line.text;
+                    el.appendChild(div);
+                });
+            } else {
+                const div = document.createElement('div');
+                div.className = 'terminal-line' + (className ? ' ' + className : '');
+                div.textContent = text;
+                el.appendChild(div);
+            }
+
+            el.scrollTop = el.scrollHeight;
+        }
+
+        // Clear output
+        function clearOutput() {
+            outputLines = [];
+            document.getElementById('mesh-output').innerHTML =
+                '<span style="color: #888;">Output cleared.</span>';
+        }
+
+        // Download output
+        function downloadOutput() {
+            const content = outputLines.map(l => l.text).join('\n');
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'meshtastic-output-' + Date.now() + '.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Disable/enable buttons while command is running
+        function disableButtons(disabled) {
+            document.querySelectorAll('.cmd-grid .btn').forEach(btn => {
+                btn.disabled = disabled;
+                btn.style.opacity = disabled ? '0.5' : '1';
+            });
+        }
+
+        // Sleep helper
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    </script>
+</body>
+</html>

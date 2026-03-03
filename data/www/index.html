@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - RAKFlasher</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">⚡ RAKFlasher</div>
+            <button class="menu-toggle">☰</button>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Dashboard</a></li>
+                    <li><a href="firmware.html">Firmware</a></li>
+                    <li><a href="recovery.html">Recovery</a></li>
+                    <li><a href="backup.html">Backup</a></li>
+                    <li><a href="serial.html">Serial</a></li>
+                    <li><a href="meshtastic.html">Meshtastic</a></li>
+                    <li><a href="settings.html">Settings</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Alert Container -->
+        <div id="alert-container"></div>
+
+        <!-- System Status Card -->
+        <div class="card">
+            <h2 class="card-title">System Status</h2>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="uptime">--</div>
+                    <div class="stat-label">Uptime</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="clients">0</div>
+                    <div class="stat-label">Connected Clients</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="heap">--</div>
+                    <div class="stat-label">Free Memory</div>
+                </div>
+                <div class="stat-item">
+                    <div id="connection-status" class="status status-disconnected">Checking...</div>
+                    <div class="stat-label">RAK Status</div>
+                </div>
+                <div class="stat-item">
+                    <div id="sta-wifi-status" class="status status-disconnected">Not configured</div>
+                    <div class="stat-label">WiFi Network</div>
+                </div>
+                <div class="stat-item">
+                    <div id="bridge-status" class="status status-disconnected">Idle</div>
+                    <div class="stat-label">Serial Bridge</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="grid grid-2">
+            <div class="card">
+                <h3 class="card-title">RAK4631 Control</h3>
+                <div class="btn-group">
+                    <button class="btn btn-primary btn-block" onclick="resetRAK()">Reset RAK</button>
+                    <button class="btn btn-secondary btn-block" onclick="enterDFUMode()">Enter DFU Mode</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">System Control</h3>
+                <div class="btn-group">
+                    <button class="btn btn-secondary btn-block" onclick="rebootESP32()">Reboot ESP32</button>
+                    <button class="btn btn-secondary btn-block" onclick="enterSleep()">Deep Sleep</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Device Information -->
+        <div class="card">
+            <h3 class="card-title">Device Information</h3>
+            <div class="grid grid-3" id="device-info">
+                <div class="stat-item">
+                    <div class="stat-label">Firmware Version</div>
+                    <div class="stat-value" style="font-size: 1.25rem;" id="firmware-version">--</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Chip Model</div>
+                    <div class="stat-value" style="font-size: 1.25rem;" id="chip-model">--</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">CPU Frequency</div>
+                    <div class="stat-value" style="font-size: 1.25rem;" id="cpu-freq">--</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Flash Size</div>
+                    <div class="stat-value" style="font-size: 1.25rem;" id="flash-size">--</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">SSID</div>
+                    <div class="stat-value" style="font-size: 1.25rem;" id="wifi-ssid">--</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">IP Address</div>
+                    <div class="stat-value" style="font-size: 1.25rem;" id="ip-address">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="card">
+            <h3 class="card-title">Quick Actions</h3>
+            <div class="grid grid-2">
+                <a href="firmware.html" class="btn btn-primary">
+                    📦 Upload Firmware
+                </a>
+                <a href="backup.html" class="btn btn-success">
+                    💾 Backup Settings
+                </a>
+                <a href="recovery.html" class="btn btn-danger">
+                    🔧 SWD Recovery
+                </a>
+                <a href="serial.html" class="btn btn-secondary">
+                    📟 Serial Monitor
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        // Load device info
+        async function loadDeviceInfo() {
+            try {
+                const data = await apiRequest('/api/info');
+
+                document.getElementById('firmware-version').textContent =
+                    (data.firmware || '?') + ' (#' + (data.buildNumber || '?') + ')';
+                document.getElementById('chip-model').textContent = data.chipModel || 'Unknown';
+                document.getElementById('cpu-freq').textContent = (data.cpuFreq || 0) + ' MHz';
+                document.getElementById('flash-size').textContent = formatBytes(data.flashSize || 0);
+
+                // Get WiFi info from status
+                const status = await apiRequest('/api/status');
+                document.getElementById('wifi-ssid').textContent =
+                    (status.ap ? status.ap.ssid : status.ssid) || 'N/A';
+                document.getElementById('ip-address').textContent = window.location.hostname;
+            } catch (error) {
+                console.error('Failed to load device info:', error);
+            }
+        }
+
+        // Reset RAK module
+        async function resetRAK() {
+            try {
+                await apiPost('/api/gpio/reset', {});
+                showAlert('RAK module reset successfully', 'success');
+            } catch (error) {
+                console.error('Reset failed:', error);
+            }
+        }
+
+        // Enter DFU mode
+        async function enterDFUMode() {
+            try {
+                await apiPost('/api/gpio/dfu', {});
+                showAlert('DFU mode activated. You can now flash firmware.', 'success');
+                setTimeout(() => {
+                    window.location.href = 'firmware.html';
+                }, 2000);
+            } catch (error) {
+                console.error('DFU mode failed:', error);
+            }
+        }
+
+        // Load info on page load
+        loadDeviceInfo();
+    </script>
+</body>
+</html>

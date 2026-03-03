@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SWD Recovery - RAKFlasher</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">⚡ RAKFlasher</div>
+            <button class="menu-toggle">☰</button>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Dashboard</a></li>
+                    <li><a href="firmware.html">Firmware</a></li>
+                    <li><a href="recovery.html">Recovery</a></li>
+                    <li><a href="backup.html">Backup</a></li>
+                    <li><a href="serial.html">Serial</a></li>
+                    <li><a href="meshtastic.html">Meshtastic</a></li>
+                    <li><a href="settings.html">Settings</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="alert-container"></div>
+
+        <div class="alert alert-warning">
+            <strong>⚠️ Warning:</strong> SWD Recovery is for advanced users only. Some operations will erase all data on the RAK4631 module.
+        </div>
+
+        <!-- SWD Connection Test -->
+        <div class="card">
+            <h2 class="card-title">SWD Connection</h2>
+            <p class="card-subtitle">Verify SWD connection to the RAK4631 module</p>
+
+            <div class="flex justify-between items-center mb-2">
+                <div>
+                    <strong>Status:</strong>
+                    <span id="swd-status" class="status status-disconnected">Not Connected</span>
+                </div>
+                <button class="btn btn-primary" onclick="testConnection()">Test Connection</button>
+            </div>
+
+            <div id="chip-info" class="hidden mt-2">
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Chip ID</div>
+                        <div class="stat-value" style="font-size: 1rem;" id="chip-id">--</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Device ID</div>
+                        <div class="stat-value" style="font-size: 1rem;" id="device-id">--</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Flash Size</div>
+                        <div class="stat-value" style="font-size: 1rem;" id="flash-size">--</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Part</div>
+                        <div class="stat-value" style="font-size: 1rem;" id="part-number">--</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Firmware Backup -->
+        <div class="card">
+            <h3 class="card-title">Firmware Backup</h3>
+            <p class="card-subtitle">Back up entire nRF52 flash via SWD (bootloader + SoftDevice + application)</p>
+
+            <div class="flex justify-between items-center mb-2">
+                <button class="btn btn-primary" onclick="backupFirmware()" id="backup-btn">
+                    💾 Backup Firmware
+                </button>
+                <button class="btn btn-secondary" onclick="downloadBackup()" id="download-btn" disabled>
+                    📥 Download Last Backup
+                </button>
+                <button class="btn btn-warning" onclick="flashFromBackup()" id="flash-backup-btn" disabled>
+                    ⚡ Flash Last Backup
+                </button>
+            </div>
+
+            <div id="backup-info" class="hidden mt-2">
+                <div class="alert alert-success" style="font-size: 0.875rem;">
+                    <strong>Last backup:</strong> <span id="backup-filename">--</span>
+                    (<span id="backup-size">--</span>)
+                </div>
+            </div>
+
+            <div class="alert alert-info mt-2" style="font-size: 0.875rem;">
+                Reads the full flash memory (typically 1MB). File is named with the device ID for identification.
+                Use "Flash Last Backup" to restore without downloading.
+            </div>
+        </div>
+
+        <!-- Recovery Operations -->
+        <div class="grid grid-2">
+            <!-- Mass Erase -->
+            <div class="card">
+                <h3 class="card-title">Mass Erase</h3>
+                <p class="card-subtitle">Erase all flash memory on the chip</p>
+
+                <button class="btn btn-danger btn-block" onclick="performMassErase()" id="erase-btn">
+                    🗑️ Mass Erase
+                </button>
+
+                <div class="alert alert-danger mt-2" style="font-size: 0.875rem;">
+                    This will erase ALL data including bootloader, firmware, and user data.
+                </div>
+            </div>
+
+            <!-- Flash Firmware Image -->
+            <div class="card">
+                <h3 class="card-title">Flash Firmware Image</h3>
+                <p class="card-subtitle">Restore a full firmware backup or flash bootloader</p>
+
+                <div class="file-upload" onclick="document.getElementById('firmware-file').click()">
+                    <p>📄 Select firmware image (.bin)</p>
+                    <input type="file" id="firmware-file" accept=".bin,.hex" onchange="handleFirmwareSelect(event)">
+                </div>
+
+                <div id="firmware-info" class="hidden mt-2">
+                    <div class="alert alert-info" style="font-size: 0.875rem;">
+                        <strong>File:</strong> <span id="firmware-filename"></span>
+                        (<span id="firmware-filesize"></span>)
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="flashFirmwareImage()" id="flash-firmware-btn">
+                        ⚡ Flash Firmware
+                    </button>
+                </div>
+
+                <div class="alert alert-warning mt-2" style="font-size: 0.875rem;">
+                    This will erase the chip first, then flash the selected image starting at address 0x00000000.
+                </div>
+            </div>
+        </div>
+
+        <!-- Operation Progress -->
+        <div class="card hidden" id="operation-progress">
+            <h3 class="card-title">Operation Progress</h3>
+            <div class="progress" id="recovery-progress-wrapper" data-label="0%">
+                <div class="progress-bar" id="recovery-progress" style="width: 0%"></div>
+            </div>
+            <p id="recovery-status" class="text-center mt-2">Processing...</p>
+
+            <div class="terminal" id="recovery-log"></div>
+        </div>
+
+        <!-- Pin Configuration -->
+        <div class="card">
+            <h3 class="card-title">SWD Pin Configuration</h3>
+            <p class="card-subtitle">Current SWD interface pin assignments</p>
+
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Function</th>
+                        <th>ESP32 GPIO</th>
+                        <th>RAK19001 Pin</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>SWD Clock</td>
+                        <td>GPIO7</td>
+                        <td>SWCLK</td>
+                    </tr>
+                    <tr>
+                        <td>SWD Data</td>
+                        <td>GPIO8</td>
+                        <td>SWDIO</td>
+                    </tr>
+                    <tr>
+                        <td>Ground</td>
+                        <td>GND</td>
+                        <td>GND</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="alert alert-info mt-2">
+                Pin configuration can be changed in the <a href="settings.html" style="color: inherit; text-decoration: underline;">Settings</a> page.
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="card">
+            <h3 class="card-title">Recovery Instructions</h3>
+            <ol style="line-height: 2;">
+                <li>Connect SWD pins (SWCLK and SWDIO) between ESP32 and RAK4631</li>
+                <li>Ensure both devices share a common ground connection</li>
+                <li>Click "Test Connection" to verify SWD communication</li>
+                <li><strong>Backup first!</strong> Click "Backup Firmware" to save a full flash image</li>
+                <li>If recovering: Mass erase, then flash your backup or a fresh bootloader</li>
+                <li>Once bootloader is flashed, use normal firmware update method</li>
+            </ol>
+
+            <div class="alert alert-warning mt-2">
+                <strong>Note:</strong> After recovery, you'll need to flash both the bootloader and application firmware.
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let selectedFirmware = null;
+        let lastBackupFile = '';
+        let swdResumeHandled = false;   // Guard: only process completed state once
+        let swdPollingActive = false;   // Guard: don't start duplicate polling
+
+        // ── Auto-resume: check for active SWD operations on page load ──
+        window.addEventListener('activeOperations', (e) => {
+            const ops = e.detail || [];
+            const swdOp = ops.find(op => op.type === 'swd');
+            if (!swdOp) return;
+
+            if (swdOp.running) {
+                // Reset the handled flag — a new operation is running
+                swdResumeHandled = false;
+
+                // Show the progress card
+                document.getElementById('operation-progress').classList.remove('hidden');
+
+                // Only start polling once (don't re-start on every 3s tick)
+                if (swdPollingActive) return;
+                swdPollingActive = true;
+
+                updateRecoveryProgress(swdOp.progress || 0, swdOp.message || 'In progress...');
+                addRecoveryLog('Reconnected — operation still in progress');
+
+                // Determine which endpoint to poll based on message content
+                const isFlash = (swdOp.message || '').toLowerCase().includes('writ');
+                const url = isFlash ? '/api/swd/flash/progress' : '/api/swd/backup/progress';
+
+                pollSWDProgress(url, (data) => {
+                    if (data.status === 'complete') {
+                        swdPollingActive = false;
+                        swdResumeHandled = true;
+                        if (!isFlash) {
+                            lastBackupFile = data.filename || '';
+                            const sizeStr = data.fileSize ?
+                                (data.fileSize / 1024).toFixed(0) + ' KB' : '?';
+                            document.getElementById('backup-info').classList.remove('hidden');
+                            document.getElementById('backup-filename').textContent =
+                                data.filename || 'firmware.bin';
+                            document.getElementById('backup-size').textContent = sizeStr;
+                            document.getElementById('download-btn').disabled = false;
+                        document.getElementById('flash-backup-btn').disabled = false;
+                        }
+                        updateRecoveryProgress(100, isFlash ? 'Flash complete!' : 'Backup complete!');
+                        addRecoveryLog(isFlash ? 'Flash completed successfully!' : 'Backup complete: ' + (data.filename || ''));
+                        showAlert(isFlash ? 'Flash completed!' : 'Backup complete! Click Download to save.', 'success');
+                        return true;
+                    } else if (data.status === 'error') {
+                        swdPollingActive = false;
+                        swdResumeHandled = true;
+                        updateRecoveryProgress(data.progress || 0, 'Error: ' + (data.error || 'Unknown'));
+                        addRecoveryLog('ERROR: ' + (data.error || 'Unknown error'));
+                        showAlert('Operation failed: ' + (data.error || 'Unknown'), 'danger');
+                        return true;
+                    } else {
+                        updateRecoveryProgress(data.progress || 0, data.message || 'Working...');
+                        return false;
+                    }
+                });
+            } else if (swdOp.complete && swdOp.result && !swdResumeHandled) {
+                // Operation completed while we were away — show result ONCE
+                swdResumeHandled = true;
+                document.getElementById('operation-progress').classList.remove('hidden');
+
+                const data = swdOp.result;
+                if (data.status === 'complete') {
+                    lastBackupFile = data.filename || '';
+                    updateRecoveryProgress(100, 'Complete (finished while away)');
+                    addRecoveryLog('Operation completed: ' + (data.filename || data.message || 'success'));
+                    if (data.filename) {
+                        document.getElementById('backup-info').classList.remove('hidden');
+                        document.getElementById('backup-filename').textContent = data.filename;
+                        document.getElementById('backup-size').textContent =
+                            data.fileSize ? (data.fileSize / 1024).toFixed(0) + ' KB' : '?';
+                        document.getElementById('download-btn').disabled = false;
+                        document.getElementById('flash-backup-btn').disabled = false;
+                    }
+                    showAlert('Operation completed!', 'success');
+                } else if (data.status === 'error') {
+                    updateRecoveryProgress(0, 'Error: ' + (data.error || 'Unknown'));
+                    addRecoveryLog('ERROR: ' + (data.error || 'Operation failed'));
+                }
+            }
+        });
+
+        // ── SWD Connection ───────────────────────────────────────────
+        async function testConnection() {
+            showLoading('swd-status');
+
+            try {
+                const data = await apiRequest('/api/swd/connect', { silent: true });
+
+                if (data.connected) {
+                    document.getElementById('swd-status').className = 'status status-connected';
+                    document.getElementById('swd-status').textContent = 'Connected';
+                    document.getElementById('chip-id').textContent = '0x' + data.chipId.toString(16).toUpperCase();
+                    document.getElementById('chip-info').classList.remove('hidden');
+
+                    // Show extended device info if available
+                    if (data.deviceId) {
+                        document.getElementById('device-id').textContent = data.deviceId;
+                    }
+                    if (data.flashSize) {
+                        document.getElementById('flash-size').textContent =
+                            (data.flashSize / 1024) + ' KB';
+                    }
+                    if (data.partNumber) {
+                        document.getElementById('part-number').textContent = data.partNumber;
+                    }
+
+                    showAlert('SWD connection established!', 'success');
+                } else {
+                    throw new Error('Connection failed');
+                }
+            } catch (error) {
+                document.getElementById('swd-status').className = 'status status-disconnected';
+                document.getElementById('swd-status').textContent = 'Failed';
+                showAlert('SWD connection failed. Check wiring.', 'danger');
+            }
+        }
+
+        // ── Firmware Backup ──────────────────────────────────────────
+        async function backupFirmware() {
+            const backupBtn = document.getElementById('backup-btn');
+            backupBtn.disabled = true;
+            document.getElementById('operation-progress').classList.remove('hidden');
+
+            // Suppress stale completed state from previous operations
+            swdResumeHandled = true;
+            swdPollingActive = false;
+
+            try {
+                addRecoveryLog('Starting firmware backup...');
+                updateRecoveryProgress(0, 'Initiating backup...');
+
+                await apiPost('/api/swd/backup', {});
+                addRecoveryLog('Backup task started, reading flash...');
+
+                // Poll for progress
+                await pollSWDProgress('/api/swd/backup/progress', (data) => {
+                    if (data.status === 'complete') {
+                        lastBackupFile = data.filename || '';
+                        const sizeStr = data.fileSize ?
+                            (data.fileSize / 1024).toFixed(0) + ' KB' : '?';
+
+                        updateRecoveryProgress(100, 'Backup complete!');
+                        addRecoveryLog('Backup complete: ' + (data.filename || 'firmware.bin'));
+                        addRecoveryLog('File size: ' + sizeStr);
+
+                        // Show download button
+                        document.getElementById('backup-info').classList.remove('hidden');
+                        document.getElementById('backup-filename').textContent =
+                            data.filename || 'firmware.bin';
+                        document.getElementById('backup-size').textContent = sizeStr;
+                        document.getElementById('download-btn').disabled = false;
+                        document.getElementById('flash-backup-btn').disabled = false;
+
+                        showAlert('Firmware backup complete! Click Download to save.', 'success');
+                        return true; // done
+                    } else if (data.status === 'error') {
+                        throw new Error(data.error || 'Backup failed');
+                    } else {
+                        updateRecoveryProgress(data.progress || 0, data.message || 'Reading...');
+                        return false; // keep polling
+                    }
+                });
+            } catch (error) {
+                addRecoveryLog('ERROR: ' + error.message);
+                showAlert('Backup failed: ' + error.message, 'danger');
+            } finally {
+                backupBtn.disabled = false;
+            }
+        }
+
+        function downloadBackup() {
+            if (lastBackupFile) {
+                window.location.href = '/api/swd/backup/download?file=' +
+                    encodeURIComponent(lastBackupFile);
+            } else {
+                window.location.href = '/api/swd/backup/download';
+            }
+        }
+
+        // ── Flash from Backup (no re-upload needed) ───────────────
+        async function flashFromBackup() {
+            if (!lastBackupFile) {
+                showAlert('No backup file available', 'warning');
+                return;
+            }
+
+            if (!confirm('This will ERASE the chip and flash from the backup file. Continue?')) {
+                return;
+            }
+
+            const flashBtn = document.getElementById('flash-backup-btn');
+            flashBtn.disabled = true;
+            document.getElementById('operation-progress').classList.remove('hidden');
+
+            // Suppress stale completed state from previous operations
+            swdResumeHandled = true;
+            swdPollingActive = false;
+
+            try {
+                addRecoveryLog('Starting flash from backup: ' + lastBackupFile);
+                updateRecoveryProgress(0, 'Starting flash from backup...');
+
+                await apiPost('/api/swd/flash/from-backup', { filename: lastBackupFile });
+                addRecoveryLog('Flash operation started...');
+
+                // Poll for progress
+                await pollSWDProgress('/api/swd/flash/progress', (data) => {
+                    if (data.status === 'complete') {
+                        updateRecoveryProgress(100, 'Flash complete!');
+                        addRecoveryLog('Firmware restored successfully!');
+                        showAlert('Firmware restored from backup!', 'success');
+                        return true;
+                    } else if (data.status === 'error') {
+                        throw new Error(data.error || 'Flash failed');
+                    } else {
+                        updateRecoveryProgress(data.progress || 0, data.message || 'Flashing...');
+                        return false;
+                    }
+                });
+            } catch (error) {
+                addRecoveryLog('ERROR: ' + error.message);
+                showAlert('Flash failed: ' + error.message, 'danger');
+            } finally {
+                flashBtn.disabled = false;
+            }
+        }
+
+        // ── Mass Erase ──────────────────────────────────────────────
+        async function performMassErase() {
+            if (!confirm('Are you ABSOLUTELY SURE you want to erase all flash memory? This cannot be undone!')) {
+                return;
+            }
+
+            if (!confirm('This will erase the bootloader and all firmware. Continue?')) {
+                return;
+            }
+
+            const eraseBtn = document.getElementById('erase-btn');
+            eraseBtn.disabled = true;
+            document.getElementById('operation-progress').classList.remove('hidden');
+
+            try {
+                addRecoveryLog('Starting mass erase...');
+                updateRecoveryProgress(10, 'Erasing...');
+
+                await apiPost('/api/swd/erase', {});
+
+                updateRecoveryProgress(100, 'Mass erase complete');
+                addRecoveryLog('Mass erase completed successfully!');
+                showAlert('Mass erase completed. You can now flash firmware.', 'success');
+            } catch (error) {
+                addRecoveryLog('ERROR: ' + error.message);
+                showAlert('Mass erase failed: ' + error.message, 'danger');
+            } finally {
+                eraseBtn.disabled = false;
+            }
+        }
+
+        // ── Flash Firmware Image ─────────────────────────────────────
+        function handleFirmwareSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            selectedFirmware = file;
+            document.getElementById('firmware-filename').textContent = file.name;
+            document.getElementById('firmware-filesize').textContent =
+                (file.size / 1024).toFixed(1) + ' KB';
+            document.getElementById('firmware-info').classList.remove('hidden');
+        }
+
+        async function flashFirmwareImage() {
+            if (!selectedFirmware) return;
+
+            if (!confirm('This will ERASE the chip and flash the selected firmware. Continue?')) {
+                return;
+            }
+
+            const flashBtn = document.getElementById('flash-firmware-btn');
+            flashBtn.disabled = true;
+            document.getElementById('operation-progress').classList.remove('hidden');
+
+            // Suppress stale completed state from previous operations
+            swdResumeHandled = true;
+            swdPollingActive = false;
+
+            try {
+                // Step 1: Upload the file
+                addRecoveryLog('Uploading firmware file...');
+                updateRecoveryProgress(0, 'Uploading...');
+
+                const formData = new FormData();
+                formData.append('firmware', selectedFirmware);
+
+                const uploadResp = await fetch('/api/swd/flash/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!uploadResp.ok) {
+                    throw new Error('Upload failed: ' + uploadResp.statusText);
+                }
+
+                addRecoveryLog('Upload complete. Starting flash...');
+                updateRecoveryProgress(5, 'Upload complete, starting flash...');
+
+                // Step 2: Start the flash operation
+                await apiPost('/api/swd/flash/start', {});
+                addRecoveryLog('Flash operation started...');
+
+                // Step 3: Poll for progress
+                await pollSWDProgress('/api/swd/flash/progress', (data) => {
+                    if (data.status === 'complete') {
+                        updateRecoveryProgress(100, 'Flash complete!');
+                        addRecoveryLog('Firmware flashed successfully!');
+                        showAlert('Firmware flashed successfully!', 'success');
+                        return true;
+                    } else if (data.status === 'error') {
+                        throw new Error(data.error || 'Flash failed');
+                    } else {
+                        updateRecoveryProgress(data.progress || 0, data.message || 'Flashing...');
+                        return false;
+                    }
+                });
+            } catch (error) {
+                addRecoveryLog('ERROR: ' + error.message);
+                showAlert('Flash failed: ' + error.message, 'danger');
+            } finally {
+                flashBtn.disabled = false;
+            }
+        }
+
+        // ── Progress Polling ─────────────────────────────────────────
+        async function pollSWDProgress(url, handler) {
+            return new Promise((resolve, reject) => {
+                const poll = async () => {
+                    try {
+                        const resp = await fetch(url);
+                        const data = await resp.json();
+
+                        let done;
+                        try {
+                            done = handler(data);
+                        } catch (e) {
+                            reject(e);
+                            return;
+                        }
+
+                        if (done) {
+                            resolve();
+                        } else {
+                            setTimeout(poll, 1000);
+                        }
+                    } catch (e) {
+                        reject(e);
+                    }
+                };
+                setTimeout(poll, 500);
+            });
+        }
+
+        // ── Progress UI Helpers ──────────────────────────────────────
+        window.addEventListener('progress', (e) => {
+            const { operation, progress, message } = e.detail;
+            if (operation === 'swd_recovery') {
+                updateRecoveryProgress(progress, message);
+                addRecoveryLog(message);
+            }
+        });
+
+        function updateRecoveryProgress(percent, message) {
+            const progressBar = document.getElementById('recovery-progress');
+            const statusText = document.getElementById('recovery-status');
+
+            progressBar.style.width = percent + '%';
+            document.getElementById('recovery-progress-wrapper').setAttribute('data-label', percent + '%');
+            statusText.textContent = message;
+        }
+
+        function addRecoveryLog(message) {
+            const log = document.getElementById('recovery-log');
+            const line = document.createElement('div');
+            line.className = 'terminal-line';
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(line);
+            log.scrollTop = log.scrollHeight;
+        }
+    </script>
+</body>
+</html>

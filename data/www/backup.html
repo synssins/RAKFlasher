@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backup & Restore - RAKFlasher</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">⚡ RAKFlasher</div>
+            <button class="menu-toggle">☰</button>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Dashboard</a></li>
+                    <li><a href="firmware.html">Firmware</a></li>
+                    <li><a href="recovery.html">Recovery</a></li>
+                    <li><a href="backup.html">Backup</a></li>
+                    <li><a href="serial.html">Serial</a></li>
+                    <li><a href="meshtastic.html">Meshtastic</a></li>
+                    <li><a href="settings.html">Settings</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="alert-container"></div>
+
+        <!-- Full Settings Backup -->
+        <div class="card">
+            <h2 class="card-title">Full Settings Backup</h2>
+            <p class="card-subtitle">Backup all Meshtastic configuration (device, position, modules, etc.)</p>
+
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="createSettingsBackup()">
+                    💾 Create Backup
+                </button>
+                <button class="btn btn-secondary" onclick="downloadLatestBackup('settings')">
+                    ⬇️ Download Latest
+                </button>
+            </div>
+
+            <div id="settings-backup-status" class="mt-2"></div>
+        </div>
+
+        <!-- Channel & Keys Backup -->
+        <div class="card">
+            <h2 class="card-title">Channel & Keys Backup</h2>
+            <p class="card-subtitle">Backup channel configuration, PSKs, and encryption keys (with optional encryption)</p>
+
+            <div class="form-group">
+                <label class="form-label">Encryption Password (optional)</label>
+                <input type="password" id="backup-password" class="form-input"
+                       placeholder="Leave empty for no encryption">
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="createChannelsBackup()">
+                    🔐 Backup Channels & Keys
+                </button>
+                <button class="btn btn-secondary" onclick="downloadLatestBackup('channels')">
+                    ⬇️ Download Latest
+                </button>
+            </div>
+
+            <div class="alert alert-info mt-2">
+                <strong>Note:</strong> If you set a password, you'll need it to restore the backup later.
+            </div>
+        </div>
+
+        <!-- Restore Section -->
+        <div class="grid grid-2">
+            <!-- Restore Settings -->
+            <div class="card">
+                <h3 class="card-title">Restore Settings</h3>
+                <p class="card-subtitle">Restore full configuration from backup</p>
+
+                <div class="file-upload" onclick="document.getElementById('restore-settings-file').click()">
+                    <p>📂 Select settings backup (.json)</p>
+                    <input type="file" id="restore-settings-file" accept=".json"
+                           onchange="handleRestoreFileSelect(event, 'settings')">
+                </div>
+
+                <div id="restore-settings-info" class="hidden mt-2">
+                    <div class="alert alert-success">
+                        Ready to restore: <strong id="restore-settings-filename"></strong>
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="restoreSettings()" id="restore-settings-btn">
+                        Restore Settings
+                    </button>
+                </div>
+            </div>
+
+            <!-- Restore Channels -->
+            <div class="card">
+                <h3 class="card-title">Restore Channels & Keys</h3>
+                <p class="card-subtitle">Restore channel configuration and keys</p>
+
+                <div class="file-upload" onclick="document.getElementById('restore-channels-file').click()">
+                    <p>📂 Select channels backup</p>
+                    <input type="file" id="restore-channels-file"
+                           onchange="handleRestoreFileSelect(event, 'channels')">
+                </div>
+
+                <div id="restore-channels-info" class="hidden mt-2">
+                    <div class="form-group">
+                        <label class="form-label">Decryption Password (if encrypted)</label>
+                        <input type="password" id="restore-password" class="form-input">
+                    </div>
+
+                    <button class="btn btn-primary btn-block" onclick="restoreChannels()" id="restore-channels-btn">
+                        Restore Channels & Keys
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backup History -->
+        <div class="card">
+            <h3 class="card-title">Backup History</h3>
+            <p class="card-subtitle">Manage stored backups</p>
+
+            <button class="btn btn-secondary mb-2" onclick="loadBackupList()">
+                🔄 Refresh List
+            </button>
+
+            <div id="backup-list">
+                <div class="text-center p-2">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Serial Connection Test -->
+        <div class="card">
+            <h3 class="card-title">Serial Connection Test</h3>
+            <p class="card-subtitle">Test the serial connection between ESP32 and RAK4631 Meshtastic device</p>
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="testSerialConnection()" id="serial-test-btn">
+                    🔌 Test Serial Connection
+                </button>
+            </div>
+            <div id="serial-test-result" class="mt-2"></div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="card">
+            <h3 class="card-title">Backup & Restore Guide</h3>
+
+            <h4 style="margin-top: 1rem;">Full Settings Backup:</h4>
+            <ul style="line-height: 2;">
+                <li>Captures all device configuration, module settings, and user information</li>
+                <li>Stored as JSON format for easy viewing and editing</li>
+                <li>Recommended before firmware updates</li>
+            </ul>
+
+            <h4 style="margin-top: 1rem;">Channel & Keys Backup:</h4>
+            <ul style="line-height: 2;">
+                <li>Stores channel configurations, pre-shared keys (PSKs), and encryption keys</li>
+                <li>Can be encrypted with a password for security</li>
+                <li>Separate from settings to allow sharing without exposing keys</li>
+            </ul>
+
+            <div class="alert alert-warning mt-2">
+                <strong>Important:</strong> Keep your backups secure, especially channel backups which contain encryption keys!
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let restoreFiles = { settings: null, channels: null };
+        let backupPollInterval = null;
+        let backupResumeHandled = false;    // Guard: only process completed state once
+        let backupPollingActive = false;    // Guard: don't start duplicate polling
+        let serialTestResumeHandled = false;
+        let serialTestPollingActive = false;
+
+        // ── Auto-resume: check for active backup operations on page load ──
+        window.addEventListener('activeOperations', (e) => {
+            const ops = e.detail || [];
+
+            // Check for running backup task
+            const backupOp = ops.find(op => op.type === 'backup');
+            if (backupOp) {
+                const statusEl = document.getElementById('settings-backup-status');
+                if (backupOp.running) {
+                    backupResumeHandled = false;
+                    if (!backupPollingActive) {
+                        backupPollingActive = true;
+                        showLoading('settings-backup-status');
+                        pollBackupStatus(backupOp.backupType || 'settings');
+                    }
+                } else if (backupOp.complete && !backupResumeHandled) {
+                    backupResumeHandled = true;
+                    if (backupOp.success && backupOp.filename) {
+                        statusEl.innerHTML = `
+                            <div class="alert alert-success">
+                                Backup created: <strong>${backupOp.filename}</strong> (completed while away)
+                            </div>
+                        `;
+                        loadBackupList();
+                    } else if (backupOp.error) {
+                        statusEl.innerHTML = `
+                            <div class="alert alert-danger">
+                                Backup failed: ${backupOp.error}
+                            </div>
+                        `;
+                    }
+                }
+            }
+
+            // Check for running serial test
+            const serialOp = ops.find(op => op.type === 'serial_test');
+            if (serialOp && serialOp.running && !serialTestPollingActive) {
+                serialTestPollingActive = true;
+                serialTestResumeHandled = false;
+                const resultEl = document.getElementById('serial-test-result');
+                const btn = document.getElementById('serial-test-btn');
+                btn.disabled = true;
+                resultEl.innerHTML = '<div class="spinner"></div><p>Serial test in progress (reconnected)...</p>';
+
+                // Poll for completion
+                const pollSerial = setInterval(async () => {
+                    try {
+                        const poll = await apiRequest('/api/serial/test', { silent: true });
+                        if (poll.status && poll.status !== 'testing') {
+                            clearInterval(pollSerial);
+                            serialTestPollingActive = false;
+                            serialTestResumeHandled = true;
+                            btn.disabled = false;
+                            // Display result (same logic as testSerialConnection)
+                            let statusClass = 'alert-danger';
+                            if (poll.status.startsWith('SUCCESS')) statusClass = 'alert-success';
+                            else if (poll.status.startsWith('PARTIAL') || poll.status.startsWith('RX_ONLY')) statusClass = 'alert-warning';
+                            resultEl.innerHTML = `<div class="alert ${statusClass}"><strong>${poll.status}</strong></div>`;
+                        }
+                    } catch (e) { /* keep polling */ }
+                }, 500);
+
+                setTimeout(() => { clearInterval(pollSerial); serialTestPollingActive = false; btn.disabled = false; }, 15000);
+            }
+        });
+
+        // Create settings backup (async — starts task then polls)
+        async function createSettingsBackup() {
+            try {
+                showLoading('settings-backup-status');
+                await apiPost('/api/backup/settings', {});
+                // Server returns immediately — now poll for completion
+                pollBackupStatus('settings');
+            } catch (error) {
+                document.getElementById('settings-backup-status').innerHTML = '';
+                showAlert('Failed to start backup: ' + error.message, 'danger');
+            }
+        }
+
+        // Create channels backup (async)
+        async function createChannelsBackup() {
+            const password = document.getElementById('backup-password').value;
+            try {
+                await apiPost('/api/backup/channels', { password });
+                showLoading('settings-backup-status');
+                pollBackupStatus('channels');
+            } catch (error) {
+                showAlert('Failed to start backup: ' + error.message, 'danger');
+            }
+        }
+
+        // Poll backup status until complete
+        function pollBackupStatus(type) {
+            const statusEl = document.getElementById('settings-backup-status');
+
+            // Clear any existing poll
+            if (backupPollInterval) clearInterval(backupPollInterval);
+
+            backupPollInterval = setInterval(async () => {
+                try {
+                    const data = await apiRequest('/api/backup/status', { silent: true });
+
+                    if (data.complete) {
+                        clearInterval(backupPollInterval);
+                        backupPollInterval = null;
+                        backupPollingActive = false;
+                        backupResumeHandled = true;
+
+                        if (data.success) {
+                            statusEl.innerHTML = `
+                                <div class="alert alert-success">
+                                    Backup created: <strong>${data.filename}</strong>
+                                </div>
+                            `;
+                            showAlert('Backup created successfully!', 'success');
+                            loadBackupList();
+                        } else {
+                            statusEl.innerHTML = '';
+                            showAlert('Backup failed: ' + (data.error || 'Unknown error'), 'danger');
+                        }
+                    }
+                } catch (e) {
+                    // Polling error — keep trying
+                }
+            }, 1000);
+
+            // Timeout after 45 seconds
+            setTimeout(() => {
+                if (backupPollInterval) {
+                    clearInterval(backupPollInterval);
+                    backupPollInterval = null;
+                    if (statusEl.querySelector('.spinner')) {
+                        statusEl.innerHTML = '';
+                        showAlert('Backup timed out — check serial connection', 'danger');
+                    }
+                }
+            }, 45000);
+        }
+
+        // Test serial connection (async: POST starts test, GET polls results)
+        async function testSerialConnection() {
+            const btn = document.getElementById('serial-test-btn');
+            const resultEl = document.getElementById('serial-test-result');
+            btn.disabled = true;
+            resultEl.innerHTML = '<div class="spinner"></div><p>Testing serial connection...</p>';
+
+            try {
+                // Start the test
+                const start = await apiPost('/api/serial/test', {});
+                if (start.status === 'BLOCKED') {
+                    resultEl.innerHTML = `<div class="alert alert-danger">${start.message}</div>`;
+                    btn.disabled = false;
+                    return;
+                }
+
+                // Poll for results (up to 15s)
+                let data = null;
+                for (let i = 0; i < 30; i++) {
+                    await new Promise(r => setTimeout(r, 500));
+                    const poll = await apiRequest('/api/serial/test', { silent: true });
+                    if (poll.status && poll.status !== 'testing') {
+                        data = poll;
+                        break;
+                    }
+                }
+
+                if (!data) {
+                    resultEl.innerHTML = '<div class="alert alert-danger">Test timed out waiting for results</div>';
+                    btn.disabled = false;
+                    return;
+                }
+
+                // Determine status color
+                let statusClass = 'alert-danger';
+                if (data.status && data.status.startsWith('SUCCESS')) {
+                    statusClass = 'alert-success';
+                } else if (data.status && (data.status.startsWith('PARTIAL') || data.status.startsWith('RX_ONLY'))) {
+                    statusClass = 'alert-warning';
+                }
+
+                let html = `
+                    <div class="alert ${statusClass}">
+                        <strong>${data.status}</strong>
+                    </div>
+                    <table class="table" style="margin-top: 0.5rem;">
+                        <tr><td>TX Pin</td><td>GPIO${data.tx_pin}</td></tr>
+                        <tr><td>RX Pin</td><td>GPIO${data.rx_pin}</td></tr>
+                        <tr><td>RX Pin State</td><td>${data.rx_pin_idle || '?'} ${data.rx_pin_toggles > 0 ? '(' + data.rx_pin_toggles + ' toggles in 50ms)' : '(no activity)'}</td></tr>
+                        <tr><td>Baud Rate</td><td>${data.baud}${data.original_baud && data.baud != data.original_baud ? ' (was ' + data.original_baud + ')' : ''}</td></tr>
+                        <tr><td>Detected Protocol</td><td>${data.detected_protocol || 'Unknown'}</td></tr>
+                        <tr><td>Passive RX</td><td>${data.drained + data.passive_received} bytes</td></tr>
+                `;
+
+                if (data.baud_scan) {
+                    html += `<tr><td>Baud Scan</td><td style="font-family:monospace;font-size:0.8rem;">${data.baud_scan}</td></tr>`;
+                    if (data.baud_scan_best) {
+                        html += `<tr><td>Best Baud</td><td>${data.baud_scan_best}</td></tr>`;
+                    }
+                }
+
+                html += `
+                        <tr><td>Bytes Sent (probe)</td><td>${data.sent_bytes} (${data.attempts} attempt${data.attempts > 1 ? 's' : ''})</td></tr>
+                        <tr><td>Response Bytes</td><td>${data.received_bytes}</td></tr>
+                        <tr><td>Meshtastic Frame</td><td>${data.got_frame_header ? 'Yes' : 'No'}</td></tr>
+                `;
+
+                const mono = 'style="font-family:monospace;font-size:0.7rem;word-break:break-all;"';
+                if (data.drain_sample) html += `<tr><td>Drain Sample</td><td ${mono}>${data.drain_sample}</td></tr>`;
+                if (data.passive_sample) html += `<tr><td>Passive Sample</td><td ${mono}>${data.passive_sample}</td></tr>`;
+                if (data.response_hex) html += `<tr><td>Response Data</td><td ${mono}>${data.response_hex}</td></tr>`;
+
+                html += '</table>';
+                resultEl.innerHTML = html;
+            } catch (error) {
+                resultEl.innerHTML = `<div class="alert alert-danger">Test failed: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Download latest backup
+        async function downloadLatestBackup(type) {
+            window.location.href = `/api/backup/${type}/download`;
+        }
+
+        // Handle restore file selection
+        function handleRestoreFileSelect(event, type) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            restoreFiles[type] = file;
+            document.getElementById(`restore-${type}-filename`).textContent = file.name;
+            document.getElementById(`restore-${type}-info`).classList.remove('hidden');
+        }
+
+        // Restore settings
+        async function restoreSettings() {
+            if (!restoreFiles.settings) return;
+
+            const btn = document.getElementById('restore-settings-btn');
+            btn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('backup', restoreFiles.settings);
+
+                await fetch('/api/backup/settings/restore', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                showAlert('Settings restored successfully!', 'success');
+            } catch (error) {
+                showAlert('Restore failed: ' + error.message, 'danger');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Restore channels
+        async function restoreChannels() {
+            if (!restoreFiles.channels) return;
+
+            const btn = document.getElementById('restore-channels-btn');
+            const password = document.getElementById('restore-password').value;
+            btn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('backup', restoreFiles.channels);
+                formData.append('password', password);
+
+                await fetch('/api/backup/channels/restore', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                showAlert('Channels restored successfully!', 'success');
+            } catch (error) {
+                showAlert('Restore failed: ' + error.message, 'danger');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Load backup list
+        async function loadBackupList() {
+            const container = document.getElementById('backup-list');
+            showLoading('backup-list');
+
+            try {
+                const data = await apiRequest('/api/backup/list');
+
+                if (data.backups.length === 0) {
+                    container.innerHTML = '<p class="text-center p-2">No backups found</p>';
+                    return;
+                }
+
+                let html = '<table class="table"><thead><tr><th>Type</th><th>Filename</th><th>Size</th><th>Actions</th></tr></thead><tbody>';
+
+                data.backups.forEach(backup => {
+                    html += `
+                        <tr>
+                            <td><span class="status ${backup.type === 'settings' ? 'status-connected' : 'status-processing'}">${backup.type}</span></td>
+                            <td>${backup.filename}</td>
+                            <td>${formatBytes(backup.size)}</td>
+                            <td>
+                                <button class="btn btn-secondary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;"
+                                        onclick="deleteBackup('${backup.filename}')">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (error) {
+                container.innerHTML = '<p class="text-center p-2">Failed to load backups</p>';
+            }
+        }
+
+        // Delete backup
+        async function deleteBackup(filename) {
+            if (!confirm(`Delete backup: ${filename}?`)) return;
+
+            try {
+                await apiRequest(`/api/backup/delete?filename=${filename}`, { method: 'DELETE' });
+                showAlert('Backup deleted', 'success');
+                loadBackupList();
+            } catch (error) {
+                showAlert('Delete failed: ' + error.message, 'danger');
+            }
+        }
+
+        // Load backup list on page load
+        loadBackupList();
+    </script>
+</body>
+</html>
