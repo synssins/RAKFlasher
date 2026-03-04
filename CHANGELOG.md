@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Batch firmware flashing for multiple devices
 - Advanced SWD debugging features
 
+## [1.2.4] - 2026-03-03
+
+### Fixed
+- **TCP bridge hanging**: Added 60-second inactivity timeout and `flush()` after UART→TCP writes so `meshtastic --host` CLI no longer hangs after command completion
+- **Meshtastic command console stale results**: GET handler now clears `s_meshCmdComplete` after serving result, preventing stale data from blocking subsequent commands
+- **Console text commands broken**: Fixed `parseCommand()` string return handling — "get channels", "help", "?", and "get channel N" text commands now work correctly
+- **Console `getHelp()` undefined**: Fixed call to non-existent `MeshDecoder.getHelp()` → `MeshDecoder.getHelpText()`
+- **Channel index lost**: "get channel N" text command now correctly passes the channel index to the API
+
 ## [1.2.3] - 2026-03-03
 
 ### Fixed
@@ -106,7 +115,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Nanopb for Meshtastic protobuf support
 - Custom 8MB partition table
 
-[Unreleased]: https://github.com/synssins/RAKFlasher/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/synssins/RAKFlasher/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/synssins/RAKFlasher/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/synssins/RAKFlasher/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/synssins/RAKFlasher/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/synssins/RAKFlasher/compare/v1.2.0...v1.2.1

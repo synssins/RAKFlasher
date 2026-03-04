@@ -10,6 +10,22 @@ Built for the **RAK4630/4631** (nRF52840) module on a **RAK19001** baseboard, th
 
 ---
 
+## Screenshots
+
+| Dashboard | Recovery (SWD Info) | Recovery (Flash/Erase) |
+|:---------:|:-------------------:|:---------------------:|
+| ![Dashboard](screenshots/Dashboard.png) | ![Recovery Info](screenshots/Recovery1.png) | ![Recovery Flash](screenshots/Recovery2.png) |
+
+| Serial Monitor | Serial (Hex Mode) | Meshtastic Console |
+|:--------------:|:------------------:|:------------------:|
+| ![Serial](screenshots/Serial.png) | ![Serial Hex](screenshots/Serial2.png) | ![Meshtastic](screenshots/MT.png) |
+
+| Firmware Upload |
+|:---------------:|
+| ![Firmware](screenshots/Firmware.png) |
+
+---
+
 ## Key Features
 
 - **SWD Flash Backup & Restore** -- Full 1MB flash dump and restore via bitbang SWD. Back up your entire nRF52 firmware and restore it later, or flash a completely new image. No bootloader needed.

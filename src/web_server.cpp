@@ -1799,6 +1799,9 @@ void WebServerManager::handleMeshtasticCommandResult(AsyncWebServerRequest* requ
         request->send(200, "application/json", "{\"status\":\"running\"}");
     } else if (s_meshCmdComplete) {
         request->send(200, "application/json", s_meshCmdResultJSON);
+        // Clear stale state so next command starts fresh
+        s_meshCmdComplete = false;
+        s_meshCmdResultJSON = "";
     } else {
         request->send(200, "application/json", "{\"status\":\"idle\"}");
     }
