@@ -397,6 +397,14 @@ void WiFiManager::loadSettings() {
     m_staSSID     = preferences.getString(NVS_KEY_STA_SSID, DEFAULT_STA_SSID);
     m_staPassword = preferences.getString(NVS_KEY_STA_PASS, DEFAULT_STA_PASSWORD);
 
+    // Persist build-time defaults to NVS on first boot so STA credentials
+    // survive OTA updates even if future firmware has different/empty defaults.
+    if (m_staEnabled && m_staSSID.length() > 0 &&
+        !preferences.isKey(NVS_KEY_STA_SSID)) {
+        saveSTASettings();
+        DEBUG_PRINTLN("[WiFi] STA build-time defaults saved to NVS");
+    }
+
     if (m_staEnabled && m_staSSID.length() > 0) {
         m_staState = STA_DISCONNECTED;  // will trigger connection in begin()
         DEBUG_PRINTF("[WiFi] STA configured for \"%s\"\n", m_staSSID.c_str());

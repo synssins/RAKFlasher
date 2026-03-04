@@ -9,7 +9,7 @@
 // Firmware version — FIRMWARE_VERSION is the semantic version (manually bumped),
 // BUILD_NUMBER auto-increments with every build via tools/version_increment.py,
 // BUILD_DATE and BUILD_TIME are set automatically by the compiler.
-#define FIRMWARE_VERSION "1.2.3"
+#define FIRMWARE_VERSION "1.2.4"
 #define PROJECT_NAME "ESP32-RAKFlasher"
 #define BUILD_DATE __DATE__   // e.g. "Mar  3 2026"
 #define BUILD_TIME __TIME__   // e.g. "14:30:05"
@@ -45,7 +45,9 @@
 #ifndef DEFAULT_STA_PASSWORD
 #define DEFAULT_STA_PASSWORD    ""
 #endif
+#ifndef DEFAULT_STA_ENABLED
 #define DEFAULT_STA_ENABLED     false      // Set true if STA credentials configured
+#endif
 #define STA_CONNECT_TIMEOUT_MS  12000       // 12s boot connect timeout
 #define STA_RETRY_INTERVAL_MS   300000      // 5min reconnect retry
 #define STA_MAX_RETRY_BACKOFF   600000      // 10min max backoff

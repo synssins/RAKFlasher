@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Batch firmware flashing for multiple devices
 - Advanced SWD debugging features
 
+## [1.2.4] - 2026-03-03
+
+### Fixed
+- **TCP bridge hang**: Meshtastic CLI (`meshtastic --host <ip>`) no longer hangs after command completion — added 60s inactivity timeout and immediate TCP flush
+- **Meshtastic console**: Fixed text commands (`get channels`, `get channel N`, `help`, `?`, `reboot N`) not working from the command input box
+- **Meshtastic console**: Fixed stale command results being served on subsequent requests
+- **WiFi STA persistence**: Build-time WiFi credentials now saved to NVS on first boot so they survive OTA updates
+- **DEFAULT_STA_ENABLED**: Now overridable via `platformio_override.ini` build flags (wrapped in `#ifndef`)
+
 ## [1.2.3] - 2026-03-03
 
 ### Fixed
@@ -106,7 +115,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Nanopb for Meshtastic protobuf support
 - Custom 8MB partition table
 
-[Unreleased]: https://github.com/synssins/RAKFlasher/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/synssins/RAKFlasher/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/synssins/RAKFlasher/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/synssins/RAKFlasher/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/synssins/RAKFlasher/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/synssins/RAKFlasher/compare/v1.2.0...v1.2.1

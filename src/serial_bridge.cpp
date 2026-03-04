@@ -24,6 +24,7 @@ SerialBridge::SerialBridge()
     , m_mode(BRIDGE_IDLE)
     , m_baudRate(RAK_SERIAL_BAUD)
     , m_activeStartTime(0)
+    , m_tcpLastActivity(0)
     , m_httpLastActivity(0)
     , m_queueHead(0)
     , m_queueTail(0)
@@ -111,6 +112,8 @@ void SerialBridge::handleTCPBridge() {
         return;
     }
 
+    bool activity = false;
+
     // TCP → UART  (client sending to RAK)
     int tcpAvail = m_tcpClient.available();
     if (tcpAvail > 0) {
@@ -120,6 +123,7 @@ void SerialBridge::handleTCPBridge() {
         if (bytesRead > 0) {
             m_serial->write(buf, bytesRead);
             m_txBytes += bytesRead;
+            activity = true;
         }
     }
 
@@ -132,7 +136,19 @@ void SerialBridge::handleTCPBridge() {
             buf[i] = m_serial->read();
         }
         m_tcpClient.write(buf, toRead);
+        // setNoDelay(true) disables Nagle — data sends immediately after write()
         m_rxBytes += toRead;
+        activity = true;
+    }
+
+    if (activity) {
+        m_tcpLastActivity = millis();
+    }
+
+    // Check TCP inactivity timeout
+    if (millis() - m_tcpLastActivity > TCP_TIMEOUT_MS) {
+        DEBUG_PRINTLN("[Bridge] TCP inactivity timeout — disconnecting client");
+        deactivateBridge();
     }
 }
 
@@ -296,7 +312,9 @@ void SerialBridge::activateBridge(BridgeMode mode) {
     // Suspend serial monitor — it checks m_suspended on every byte read
     serialMonitor.suspend();
 
-    if (mode == BRIDGE_HTTP) {
+    if (mode == BRIDGE_TCP) {
+        m_tcpLastActivity = millis();
+    } else if (mode == BRIDGE_HTTP) {
         m_httpLastActivity = millis();
         // Reset frame parser and queue
         m_parseState = PS_SYNC1;

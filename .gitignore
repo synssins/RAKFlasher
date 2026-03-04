@@ -38,6 +38,9 @@ tmp/
 temp/
 *.tmp
 
+# Local PlatformIO overrides (credentials, custom settings)
+platformio_override.ini
+
 # Claude / internal documentation
 .claude/
 CLAUDE.md
