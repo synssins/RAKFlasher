@@ -12,7 +12,7 @@ Built for the **RAK4630/4631** (nRF52840) module on a **RAK19001** baseboard, th
 
 ## Key Features
 
-- **SWD Flash Backup & Restore** -- Full 1MB flash dump and restore via bitbang SWD. Back up your entire nRF52 firmware and restore it later, or flash a completely new image. No bootloader needed.
+- **SWD Flash Backup** -- Full 1MB flash dump via bitbang SWD. Back up your entire nRF52 firmware. No bootloader needed. (Restore is implemented but still being tested.)
 - **Meshtastic Config Backup & Restore** -- Full settings, channels, and encryption keys backed up via the native Meshtastic protobuf serial API. Restore to the same node or transfer to another.
 - **Meshtastic Command Console** -- Query and change Meshtastic settings from your browser. GET any config section, view channels, check device metadata, reboot, factory reset -- all through a web UI.
 - **TCP Bridge (Port 4403)** -- Transparent serial bridge compatible with the Meshtastic Python CLI. Use `meshtastic --host <ip>` as if directly connected via USB.
@@ -36,7 +36,6 @@ Built for the **RAK4630/4631** (nRF52840) module on a **RAK19001** baseboard, th
 | SWD Connect & Info | JTAG-to-SWD init, IDCODE read, FICR device info, lock detection |
 | SWD Mass Erase | Via nRF Control-AP with completion polling |
 | SWD Flash Backup | Full 1MB flash + 4KB UICR dump to file with real-time KB/s progress |
-| SWD Flash Restore | From uploaded file or from stored backup on device |
 | SWD Memory Read/Write | Bulk read with auto-increment, NVMC-aware writes |
 | Meshtastic Config Backup | Full protobuf config dump (10 config types, 16 module types, 8 channels) |
 | Meshtastic Config Restore | Admin messages for all config/module/channel sections |
@@ -59,6 +58,7 @@ Built for the **RAK4630/4631** (nRF52840) module on a **RAK19001** baseboard, th
 
 | Feature | Status | Notes |
 |---------|--------|-------|
+| SWD Flash Restore | Write path implemented | Needs further testing — possible speed regression |
 | Serial DFU Flashing | SLIP framing implemented | Data transfer pipeline not yet complete |
 | Channel Backup Encryption | XOR obfuscation only | Needs AES-256 implementation |
 
@@ -72,6 +72,26 @@ Built for the **RAK4630/4631** (nRF52840) module on a **RAK19001** baseboard, th
 | Selective restore | Restore only specific settings (channels only, LoRa only, etc.) |
 | Batch operations | Flash/configure multiple nodes |
 | Additional platform support | Other ESP32 variants, other nRF52-based modules |
+
+---
+
+## Screenshots
+
+| Dashboard | Recovery |
+|:-:|:-:|
+| ![Dashboard](screenshots/Dashboard.png) | ![Recovery](screenshots/Recovery1.png) |
+
+| Serial Monitor | Meshtastic Console |
+|:-:|:-:|
+| ![Serial Monitor](screenshots/Serial.png) | ![Meshtastic](screenshots/MT.png) |
+
+| Firmware | SWD Recovery Detail |
+|:-:|:-:|
+| ![Firmware](screenshots/Firmware.png) | ![Recovery Detail](screenshots/Recovery2.png) |
+
+| Serial (Hex Mode) |
+|:-:|
+| ![Serial Hex](screenshots/Serial2.png) |
 
 ---
 
