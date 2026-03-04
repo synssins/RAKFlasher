@@ -3,6 +3,13 @@
  * Common functions and utilities
  */
 
+// Apply saved theme immediately to prevent flash of wrong theme
+(function() {
+    if (localStorage.getItem('theme') === 'dark') {
+        document.documentElement.classList.add('dark');
+    }
+})();
+
 // Global state
 const App = {
     ws: null,
@@ -16,6 +23,9 @@ const App = {
  * Initialize application
  */
 function initApp() {
+    // Apply saved theme immediately (before render)
+    initTheme();
+
     // Connect WebSocket
     connectWebSocket();
 
@@ -33,6 +43,9 @@ function initApp() {
 
     // Inject global operation banner container
     injectGlobalOpsBanner();
+
+    // Inject dark mode toggle into header
+    injectThemeToggle();
 }
 
 /**
@@ -450,7 +463,7 @@ function injectGlobalOpsBanner() {
     if (document.getElementById('global-ops-banner')) return;
     const banner = document.createElement('div');
     banner.id = 'global-ops-banner';
-    banner.style.cssText = 'display:none;background:#1a237e;color:#fff;padding:0.5rem 1rem;' +
+    banner.style.cssText = 'display:none;background:var(--primary-dark);color:#fff;padding:0.5rem 1rem;' +
         'font-size:0.85rem;text-align:center;cursor:pointer;position:sticky;top:0;z-index:1000;';
     banner.innerHTML = '<span id="global-ops-text"></span>';
     banner.addEventListener('click', () => {
@@ -513,6 +526,56 @@ function updateGlobalOpsBanner() {
         banner.style.display = 'block';
     } else {
         banner.style.display = 'none';
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Dark Mode Theme Toggle
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Initialize theme from localStorage (call early to prevent flash)
+ */
+function initTheme() {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'dark') {
+        document.documentElement.classList.add('dark');
+    }
+}
+
+/**
+ * Inject the theme toggle button into the header toolbar
+ */
+function injectThemeToggle() {
+    const headerContent = document.querySelector('.header-content');
+    if (!headerContent || document.getElementById('theme-toggle')) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'theme-toggle';
+    btn.className = 'theme-toggle';
+    btn.title = 'Toggle dark/light mode';
+    btn.textContent = document.documentElement.classList.contains('dark') ? '\u2600' : '\u263E';
+    btn.addEventListener('click', toggleTheme);
+
+    // Insert before the menu toggle button (or at the end)
+    const menuToggle = headerContent.querySelector('.menu-toggle');
+    if (menuToggle) {
+        headerContent.insertBefore(btn, menuToggle);
+    } else {
+        headerContent.appendChild(btn);
+    }
+}
+
+/**
+ * Toggle between light and dark themes
+ */
+function toggleTheme() {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+
+    const btn = document.getElementById('theme-toggle');
+    if (btn) {
+        btn.textContent = isDark ? '\u2600' : '\u263E';
     }
 }
 
