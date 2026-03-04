@@ -103,7 +103,7 @@ public:
     bool isDeviceUnlocked();
 
     // ── Erase operations ───────────────────────────────────────────────
-    bool massErase();
+    bool massErase(void (*logCallback)(const String&) = nullptr);
 
     // ── Flash data to address ──────────────────────────────────────────
     bool flashData(uint32_t address, const uint8_t* data, size_t len,

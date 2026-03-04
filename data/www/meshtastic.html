@@ -390,28 +390,43 @@
         }
 
         // Poll for result
+        let pollStartTime = 0;
+        const POLL_TIMEOUT_MS = 20000;  // 20s max wait
+
         function startPolling() {
             if (pollTimer) clearInterval(pollTimer);
+            pollStartTime = Date.now();
             pollTimer = setInterval(checkResult, 500);
         }
 
+        function stopPolling(reason) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            meshPollingActive = false;
+            busy = false;
+            disableButtons(false);
+        }
+
         async function checkResult() {
+            // Timeout — don't poll forever
+            if (Date.now() - pollStartTime > POLL_TIMEOUT_MS) {
+                stopPolling();
+                appendOutput('Timeout waiting for response (20s). Device may not be responding.', 'frame-error');
+                return;
+            }
+
             try {
                 const resp = await apiRequest('/api/meshtastic/command', { silent: true });
                 if (resp.status === 'complete') {
-                    clearInterval(pollTimer);
-                    pollTimer = null;
-                    meshPollingActive = false;
+                    stopPolling();
                     displayResult(resp);
-                    busy = false;
-                    disableButtons(false);
                 } else if (resp.status === 'error') {
-                    clearInterval(pollTimer);
-                    pollTimer = null;
-                    meshPollingActive = false;
+                    stopPolling();
                     appendOutput('Error: ' + (resp.error || 'Unknown error'), 'frame-error');
-                    busy = false;
-                    disableButtons(false);
+                } else if (resp.status === 'idle') {
+                    // Result was already consumed (race) or task never started
+                    stopPolling();
+                    appendOutput('No result available (command may have timed out)', 'frame-error');
                 }
                 // else still running, keep polling
             } catch (e) {

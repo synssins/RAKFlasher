@@ -46,6 +46,13 @@ public:
     void resetRAK();
 
     /**
+     * @brief Hard reset — hold RESET LOW for extended period
+     * Forces all peripherals (W5500, etc.) to fully power down
+     * @param holdMs Duration to hold RESET LOW (default 2000ms)
+     */
+    void hardResetRAK(uint32_t holdMs = 2000);
+
+    /**
      * @brief Enter DFU mode (double-tap reset)
      * Nordic bootloader enters DFU on double reset within 500ms
      */

@@ -112,6 +112,7 @@ private:
     static void handleGPIOConfigPost(AsyncWebServerRequest* request);
     static void handleGPIOTest(AsyncWebServerRequest* request);
     static void handleGPIOReset(AsyncWebServerRequest* request);
+    static void handleGPIOHardReset(AsyncWebServerRequest* request);
     static void handleGPIODFU(AsyncWebServerRequest* request);
 
     static void handleSettings(AsyncWebServerRequest* request);

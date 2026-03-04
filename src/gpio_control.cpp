@@ -62,6 +62,22 @@ void GPIOControl::resetRAK() {
     DEBUG_PRINTLN("[GPIO] RAK reset complete");
 }
 
+void GPIOControl::hardResetRAK(uint32_t holdMs) {
+    PinConfig resetPin = m_pins[PIN_RESET];
+
+    DEBUG_PRINTF("[GPIO] Hard reset: holding RESET LOW for %u ms...\n", holdMs);
+
+    // Assert reset (active LOW by default)
+    digitalWrite(resetPin.gpio, resetPin.activeLevel == LOW ? LOW : HIGH);
+    delay(holdMs);
+
+    // Release reset
+    digitalWrite(resetPin.gpio, resetPin.activeLevel == LOW ? HIGH : LOW);
+    delay(1000);  // Allow RAK to fully boot
+
+    DEBUG_PRINTLN("[GPIO] Hard reset complete");
+}
+
 void GPIOControl::enterDFUMode() {
     DEBUG_PRINTLN("[GPIO] Entering DFU mode (double reset)...");
 

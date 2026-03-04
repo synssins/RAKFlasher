@@ -299,6 +299,8 @@ bool SWDEngine::isDeviceUnlocked() {
 
 uint32_t SWDEngine::readReg(uint32_t address) {
     uint32_t temp = 0;
+    // Ensure CSW is set for single 32-bit reads (matching reference read_register)
+    apWrite(AP_CSW, CSW_32BIT_NO_INC);
     apWrite(AP_TAR, address);
     apRead(AP_DRW, temp);
     dpRead(DP_RDBUFF, temp);
@@ -308,6 +310,8 @@ uint32_t SWDEngine::readReg(uint32_t address) {
 
 void SWDEngine::writeReg(uint32_t address, uint32_t value) {
     uint32_t temp = 0;
+    // Ensure CSW is set for single 32-bit writes (matching reference write_register)
+    apWrite(AP_CSW, CSW_32BIT_NO_INC);
     apWrite(AP_TAR, address);
     apWrite(AP_DRW, value);
     dpRead(DP_RDBUFF, temp);
@@ -329,7 +333,8 @@ bool SWDEngine::readBank(uint32_t address, uint32_t* buffer, size_t len) {
     // Dummy read to prime the pipeline
     apRead(AP_DRW, temp);
 
-    // Read data words
+    // Read data words — don't abort on transient failures,
+    // apRead already retries 15x internally
     for (size_t i = 0; i < len; i += 4) {
         uint32_t word = 0;
         apRead(AP_DRW, word);
@@ -360,15 +365,38 @@ bool SWDEngine::writeBank(uint32_t address, const uint32_t* buffer, size_t len) 
         }
     }
 
-    // Set CSW for 32-bit, auto-increment
-    apWrite(AP_CSW, CSW_32BIT_AUTO_INC);
-    // Set starting address
-    apWrite(AP_TAR, address);
+    // Set CSW for 32-bit, auto-increment (retry setup on failure)
+    bool setupOk = false;
+    for (int attempt = 0; attempt < 3; attempt++) {
+        if (apWrite(AP_CSW, CSW_32BIT_AUTO_INC) && apWrite(AP_TAR, address)) {
+            setupOk = true;
+            break;
+        }
+        DEBUG_PRINTF("[SWD] writeBank setup retry %d/3 at 0x%08X\n", attempt + 1, address);
+        abortAll();
+        delayMicroseconds(100);
+    }
+    if (!setupOk) {
+        m_lastError = "Failed to set CSW/TAR for write at 0x" + String(address, HEX);
+        writeReg(NRF_NVMC_CONFIG, 0);
+        return false;
+    }
 
     // Write data words with 400µs inter-word delay for flash programming
     for (size_t i = 0; i < len; i += 4) {
         unsigned long endMicros = micros() + 400;
-        apWrite(AP_DRW, buffer[i / 4]);
+        if (!apWrite(AP_DRW, buffer[i / 4])) {
+            // Retry the single word once after clearing errors
+            abortAll();
+            apWrite(AP_CSW, CSW_32BIT_AUTO_INC);
+            apWrite(AP_TAR, address + i);
+            if (!apWrite(AP_DRW, buffer[i / 4])) {
+                m_lastError = "Flash write failed at offset 0x" + String(i, HEX);
+                apWrite(AP_CSW, CSW_32BIT_NO_INC);
+                writeReg(NRF_NVMC_CONFIG, 0);
+                return false;
+            }
+        }
         while (micros() < endMicros) { /* wait */ }
     }
 
@@ -511,59 +539,183 @@ String SWDEngine::getDeviceIDString() const {
 //  Mass Erase (via nRF Control-AP — more reliable than NVMC)
 // ════════════════════════════════════════════════════════════════════════
 
-bool SWDEngine::massErase() {
-    if (!m_connected) {
-        m_lastError = "Not connected";
+bool SWDEngine::massErase(void (*logCb)(const String&)) {
+    // Helper lambda: log to both Serial and UI callback
+    auto LOG = [&](const char* fmt, ...) {
+        char buf[256];
+        va_list args;
+        va_start(args, fmt);
+        vsnprintf(buf, sizeof(buf), fmt, args);
+        va_end(args);
+        DEBUG_PRINTLN(buf);
+        if (logCb) logCb(String(buf));
+    };
+
+    // Always do a fresh SWD init — previous operations (backup etc.) may
+    // leave the SWD bus in a stale state where AP reads return all zeros
+    LOG("Performing fresh SWD connect...");
+    if (!connect()) {
+        m_lastError = "SWD reconnect failed before erase";
+        LOG("ERROR: %s", m_lastError.c_str());
+        return false;
+    }
+    LOG("SWD connected, chip ID: 0x%08X", getChipID());
+
+    LOG("Selecting AHB-AP and halting CPU...");
+    portSelect(false);
+    haltCPU();
+
+    // ── Pre-erase diagnostics ────────────────────────────────────────
+    uint32_t preReady = readReg(NRF_NVMC_READY);
+    uint32_t preFlash = readReg(0x00000000);
+    LOG("Pre-erase: NVMC_READY=0x%08X, flash[0]=0x%08X", preReady, preFlash);
+
+    // ── Method 1: NVMC-based erase ───────────────────────────────────
+    // Matches reference erase_flash(): NVMC_CONFIG=2, NVMC_ERASEALL=1
+    LOG("--- NVMC Erase (Method 1) ---");
+    bool nvmcOk = false;
+
+    // Enable erase mode
+    writeReg(NRF_NVMC_CONFIG, 2);
+    uint32_t configRb = readReg(NRF_NVMC_CONFIG);
+    LOG("NVMC_CONFIG write=2, readback=0x%08X %s", configRb,
+        configRb == 2 ? "(OK)" : "(MISMATCH!)");
+
+    // Wait for NVMC ready
+    unsigned long timeout = millis();
+    while (readReg(NRF_NVMC_READY) != 1) {
+        if (millis() - timeout > 200) {
+            LOG("NVMC not ready after 200ms — skipping to Control-AP");
+            break;
+        }
+    }
+
+    if (readReg(NRF_NVMC_READY) == 1) {
+        // Trigger erase
+        LOG("NVMC ready. Writing ERASEALL=1 (0x4001E50C)...");
+        writeReg(NRF_NVMC_ERASEALL, 1);
+
+        // Poll NVMC_READY — should go 0 during erase, back to 1 when done
+        timeout = millis();
+        int polls = 0;
+        while (true) {
+            uint32_t ready = readReg(NRF_NVMC_READY);
+            polls++;
+            if (polls <= 10 || polls % 100 == 0) {
+                LOG("  NVMC_READY poll #%d: 0x%08X (%lums)", polls, ready, millis() - timeout);
+            }
+            if (ready == 1 && millis() - timeout > 50) {
+                LOG("NVMC erase done: %d polls, %lums", polls, millis() - timeout);
+                break;
+            }
+            if (millis() - timeout > 5000) {
+                LOG("NVMC erase TIMEOUT after 5s (%d polls)", polls);
+                break;
+            }
+            delay(10);
+        }
+
+        // Disable erase mode
+        writeReg(NRF_NVMC_CONFIG, 0);
+        timeout = millis();
+        while (readReg(NRF_NVMC_READY) != 1) {
+            if (millis() - timeout > 200) break;
+        }
+
+        // Verify: read first flash word
+        uint32_t postFlash = readReg(0x00000000);
+        LOG("Post NVMC erase: flash[0]=0x%08X %s", postFlash,
+            postFlash == 0xFFFFFFFF ? "(ERASED)" : "(NOT ERASED!)");
+
+        if (postFlash == 0xFFFFFFFF) {
+            nvmcOk = true;
+        }
+    }
+
+    // ── Method 2: Control-AP ERASEALL ────────────────────────────────
+    if (!nvmcOk) {
+        LOG("--- Control-AP Erase (Method 2) ---");
+        uint32_t temp = 0;
+
+        portSelect(true);
+
+        // Read APPROTECTSTATUS first
+        temp = 0;
+        apRead(AP_NRF_APPROTECTSTATUS, temp);
+        dpRead(DP_RDBUFF, temp);
+        dpRead(DP_RDBUFF, temp);
+        LOG("APPROTECTSTATUS=0x%08X (%s)", temp,
+            (temp & 1) ? "unlocked" : "LOCKED");
+
+        // Trigger erase
+        LOG("Writing ERASEALL=1...");
+        apWrite(AP_NRF_ERASEALL, 1);
+        dpRead(DP_RDBUFF, temp);
+        dpRead(DP_RDBUFF, temp);
+
+        delayMicroseconds(100);
+
+        // Poll ERASEALLSTATUS — 0 = complete, non-zero = in progress
+        unsigned long startTime = millis();
+        int polls = 0;
+        while (true) {
+            temp = 0;
+            apRead(AP_NRF_ERASEALLSTATUS, temp);
+            uint32_t statusRaw = temp; // save before RDBUFF overwrites
+            dpRead(DP_RDBUFF, temp);
+            // Note: temp now holds the RDBUFF result (the actual pipelined read value)
+            polls++;
+            if (polls <= 10 || polls % 100 == 0) {
+                LOG("  ERASEALLSTATUS poll #%d: apRead=0x%08X, RDBUFF=0x%08X (%lums)",
+                    polls, statusRaw, temp, millis() - startTime);
+            }
+
+            if (temp == 0 && millis() - startTime > 50) {
+                LOG("Control-AP erase done: %d polls, %lums", polls, millis() - startTime);
+                break;
+            }
+            if (millis() - startTime > 10000) {
+                LOG("Control-AP erase TIMEOUT after 10s (%d polls)", polls);
+                m_lastError = "Erase timeout after 10s";
+                portSelect(false);
+                return false;
+            }
+            delay(10);
+        }
+
+        // Clear ERASEALL register
+        apWrite(AP_NRF_ERASEALL, 0);
+        dpRead(DP_RDBUFF, temp);
+        dpRead(DP_RDBUFF, temp);
+        portSelect(false);
+
+        // Verify
+        uint32_t postFlash = readReg(0x00000000);
+        LOG("Post Control-AP erase: flash[0]=0x%08X %s", postFlash,
+            postFlash == 0xFFFFFFFF ? "(ERASED)" : "(NOT ERASED!)");
+    }
+
+    // ── Reset and reconnect ──────────────────────────────────────────
+    LOG("Performing soft reset...");
+    softReset();
+    delay(100);
+
+    LOG("Reconnecting...");
+    bool reconnected = connect();
+    LOG("Reconnect: %s", reconnected ? "OK" : "FAILED");
+
+    // Final verification — read flash[0] after reset
+    uint32_t finalFlash = readReg(0x00000000);
+    LOG("Final verify: flash[0]=0x%08X %s", finalFlash,
+        finalFlash == 0xFFFFFFFF ? "(ERASED — SUCCESS)" : "(NOT ERASED — ERASE FAILED!)");
+
+    if (finalFlash != 0xFFFFFFFF) {
+        m_lastError = "Erase verification failed — flash not empty";
+        LOG("ERASE FAILED: flash[0]=0x%08X (expected 0xFFFFFFFF)", finalFlash);
         return false;
     }
 
-    DEBUG_PRINTLN("[SWD] Performing mass erase via Control-AP...");
-
-    uint32_t temp = 0;
-
-    // Switch to nRF Control-AP
-    portSelect(true);
-
-    // Trigger erase all
-    apWrite(AP_NRF_ERASEALL, 1);
-    dpRead(DP_RDBUFF, temp);
-    dpRead(DP_RDBUFF, temp);
-
-    delayMicroseconds(100);
-
-    // Wait for erase to complete (poll ERASEALLSTATUS)
-    unsigned long startTime = millis();
-    while (true) {
-        temp = 0;
-        apRead(AP_NRF_ERASEALLSTATUS, temp);
-        dpRead(DP_RDBUFF, temp);
-        dpRead(DP_RDBUFF, temp);
-        if (temp == 0) break;  // Erase complete
-
-        if (millis() - startTime > 10000) {
-            m_lastError = "Erase timeout";
-            portSelect(false);
-            return false;
-        }
-        delay(10);
-    }
-
-    // Clear erase command
-    apWrite(AP_NRF_ERASEALL, 0);
-    dpRead(DP_RDBUFF, temp);
-    dpRead(DP_RDBUFF, temp);
-
-    // Back to AHB-AP
-    portSelect(false);
-
-    // Soft reset and reconnect
-    softReset();
-
-    // Re-init connection after erase
-    delay(100);
-    connect();
-
-    DEBUG_PRINTLN("[SWD] Mass erase complete");
+    LOG("Mass erase verified successfully");
     return true;
 }
 
@@ -585,7 +737,7 @@ bool SWDEngine::flashData(uint32_t address, const uint8_t* data, size_t len,
         size_t chunkSize = min((size_t)4096, len - written);
 
         if (!writeBank(address + written, (const uint32_t*)(data + written), chunkSize)) {
-            m_lastError = "Write failed at offset " + String(written);
+            m_lastError = "Write failed at offset 0x" + String(written, HEX);
             return false;
         }
 
@@ -728,7 +880,7 @@ bool SWDEngine::flashFromFile(const String& filepath, uint32_t targetAddr,
         }
 
         if (!writeBank(targetAddr + offset, (const uint32_t*)buffer, bytesRead)) {
-            m_lastError = "Write failed at offset " + String(offset);
+            m_lastError = "Write failed at offset 0x" + String(offset, HEX);
             file.close();
             return false;
         }
@@ -744,7 +896,9 @@ bool SWDEngine::flashFromFile(const String& filepath, uint32_t targetAddr,
     file.close();
 
     unsigned long elapsed = millis() - startMs;
-    DEBUG_PRINTF("[SWD] Flash from file complete: %ums\n", elapsed);
+    float speed = (elapsed > 0) ? ((float)fileSize / (float)elapsed) : 0;
+    DEBUG_PRINTF("[SWD] Flash from file complete: %ums (%.1f KB/s)\n",
+                 elapsed, speed);
 
     return true;
 }

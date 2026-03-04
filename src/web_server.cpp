@@ -64,6 +64,24 @@ static String s_swdResultJSON;
 static String s_swdBackupFilename;
 static String s_swdUploadedFile;
 
+// --- SWD operation log buffer (for streaming detailed messages to UI) ---
+#define SWD_LOG_MAX_LINES 100
+static String s_swdLogLines[SWD_LOG_MAX_LINES];
+static volatile int s_swdLogCount = 0;
+static volatile int s_swdLogReadIndex = 0;  // UI reads from here
+
+static void swdLogCallback(const String& msg) {
+    if (s_swdLogCount < SWD_LOG_MAX_LINES) {
+        s_swdLogLines[s_swdLogCount] = msg;
+        s_swdLogCount++;
+    }
+}
+
+static void swdLogClear() {
+    s_swdLogCount = 0;
+    s_swdLogReadIndex = 0;
+}
+
 // FreeRTOS task: backup settings in background
 void backupSettingsTask(void* param) {
     DEBUG_PRINTLN("[Backup] Task started: settings backup");
@@ -325,6 +343,59 @@ static void swdBackupTaskFunc(void* param) {
     vTaskDelete(NULL);
 }
 
+// FreeRTOS task: SWD mass erase
+static void swdEraseTaskFunc(void* param) {
+    DEBUG_PRINTLN("[SWD] Erase task started");
+    setSystemState(STATE_SWD_RECOVERY);
+
+    s_swdProgress = 0;
+    s_swdProgressMsg = "Connecting...";
+    swdLogClear();
+    swdLogCallback("Initializing SWD connection...");
+
+    swdEngine.begin();
+
+    // Always do a fresh connect — SWD state may be stale from previous operations
+    if (!swdEngine.connect()) {
+        swdLogCallback("ERROR: " + swdEngine.getLastError());
+        JsonDocument doc;
+        doc["status"] = "error";
+        doc["error"] = swdEngine.getLastError();
+        s_swdResultJSON = "";
+        serializeJson(doc, s_swdResultJSON);
+        s_swdTaskComplete = true;
+        s_swdTaskRunning = false;
+        setSystemState(STATE_IDLE);
+        vTaskDelete(NULL);
+        return;
+    }
+    swdLogCallback("Connected — chip ID: " + String(swdEngine.getChipID(), HEX));
+
+    s_swdProgressMsg = "Erasing flash...";
+    s_swdProgress = 10;
+
+    bool ok = swdEngine.massErase(swdLogCallback);
+
+    JsonDocument doc;
+    if (ok) {
+        s_swdProgress = 100;
+        s_swdProgressMsg = "Erase verified — flash is empty";
+        doc["status"] = "complete";
+        doc["message"] = "Mass erase verified successfully";
+    } else {
+        doc["status"] = "error";
+        doc["error"] = swdEngine.getLastError();
+    }
+
+    s_swdResultJSON = "";
+    serializeJson(doc, s_swdResultJSON);
+    s_swdTaskComplete = true;
+    s_swdTaskRunning = false;
+    setSystemState(STATE_IDLE);
+    DEBUG_PRINTF("[SWD] Erase task complete: %s\n", ok ? "success" : "failed");
+    vTaskDelete(NULL);
+}
+
 // FreeRTOS task: SWD firmware flash from uploaded file
 static void swdFlashTaskFunc(void* param) {
     DEBUG_PRINTLN("[SWD] Flash task started");
@@ -332,28 +403,32 @@ static void swdFlashTaskFunc(void* param) {
 
     s_swdProgress = 0;
     s_swdProgressMsg = "Connecting...";
+    swdLogClear();
+    swdLogCallback("Flash task: Initializing SWD connection...");
 
     swdEngine.begin();
 
-    if (!swdEngine.isConnected()) {
-        if (!swdEngine.connect()) {
-            JsonDocument doc;
-            doc["status"] = "error";
-            doc["error"] = swdEngine.getLastError();
-            s_swdResultJSON = "";
-            serializeJson(doc, s_swdResultJSON);
-            s_swdTaskComplete = true;
-            s_swdTaskRunning = false;
-            setSystemState(STATE_IDLE);
-            vTaskDelete(NULL);
-            return;
-        }
+    // Always do a fresh connect — SWD state may be stale from previous operations
+    if (!swdEngine.connect()) {
+        swdLogCallback("ERROR: " + swdEngine.getLastError());
+        JsonDocument doc;
+        doc["status"] = "error";
+        doc["error"] = swdEngine.getLastError();
+        s_swdResultJSON = "";
+        serializeJson(doc, s_swdResultJSON);
+        s_swdTaskComplete = true;
+        s_swdTaskRunning = false;
+        setSystemState(STATE_IDLE);
+        vTaskDelete(NULL);
+        return;
     }
+    swdLogCallback("Connected — chip ID: " + String(swdEngine.getChipID(), HEX));
 
     // Erase chip first
     s_swdProgressMsg = "Erasing flash...";
     s_swdProgress = 5;
-    if (!swdEngine.massErase()) {
+    swdLogCallback("Starting mass erase before flash...");
+    if (!swdEngine.massErase(swdLogCallback)) {
         JsonDocument doc;
         doc["status"] = "error";
         doc["error"] = "Mass erase failed: " + swdEngine.getLastError();
@@ -531,6 +606,30 @@ void WebServerManager::setupRoutes() {
     m_server->on("/api/swd/connect", HTTP_GET, handleSWDConnect);
     m_server->on("/api/swd/info", HTTP_GET, handleSWDInfo);
     m_server->on("/api/swd/erase", HTTP_POST, handleSWDErase);
+    m_server->on("/api/swd/erase/progress", HTTP_GET, [](AsyncWebServerRequest* request) {
+        JsonDocument doc;
+        if (s_swdTaskComplete && s_swdResultJSON.length() > 0) {
+            // Task done — return final result
+            deserializeJson(doc, s_swdResultJSON);
+        } else if (s_swdTaskRunning) {
+            doc["status"] = "running";
+        } else {
+            doc["status"] = "idle";
+        }
+        doc["progress"] = (int)s_swdProgress;
+        doc["message"] = s_swdProgressMsg;
+        // Append any new log lines since last poll
+        JsonArray logArr = doc["log"].to<JsonArray>();
+        int readIdx = (int)s_swdLogReadIndex;
+        int count = (int)s_swdLogCount;
+        for (int i = readIdx; i < count && i < SWD_LOG_MAX_LINES; i++) {
+            logArr.add(s_swdLogLines[i]);
+        }
+        s_swdLogReadIndex = count;
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    });
     // NOTE: Do NOT register a catch-all "/api/swd/flash" here — ESPAsyncWebServer
     // uses prefix matching (uri + "/") so it would swallow /flash/upload,
     // /flash/start, /flash/from-backup, and /flash/progress sub-routes.
@@ -756,6 +855,7 @@ void WebServerManager::setupRoutes() {
     m_server->on("/api/gpio/config", HTTP_POST, handleGPIOConfigPost);
     m_server->on("/api/gpio/test", HTTP_POST, handleGPIOTest);
     m_server->on("/api/gpio/reset", HTTP_POST, handleGPIOReset);
+    m_server->on("/api/gpio/hard-reset", HTTP_POST, handleGPIOHardReset);
     m_server->on("/api/gpio/dfu", HTTP_POST, handleGPIODFU);
 
     // Settings endpoints
@@ -1200,20 +1300,20 @@ void WebServerManager::handleSWDInfo(AsyncWebServerRequest* request) {
 }
 
 void WebServerManager::handleSWDErase(AsyncWebServerRequest* request) {
-    swdEngine.begin();
-    setSystemState(STATE_SWD_RECOVERY);
-
-    if (!swdEngine.isConnected()) {
-        swdEngine.connect();
+    if (s_swdTaskRunning) {
+        sendError(request, "SWD operation already in progress");
+        return;
     }
 
-    if (swdEngine.massErase()) {
-        sendSuccess(request, "Mass erase complete");
-    } else {
-        sendError(request, "Mass erase failed: " + swdEngine.getLastError());
-    }
+    s_swdTaskRunning = true;
+    s_swdTaskComplete = false;
+    s_swdProgress = 0;
+    s_swdProgressMsg = "Starting...";
+    s_swdResultJSON = "";
+    swdLogClear();
 
-    setSystemState(STATE_IDLE);
+    xTaskCreatePinnedToCore(swdEraseTaskFunc, "swd_erase", 16384, NULL, 5, NULL, 1);
+    sendSuccess(request, "Erase started");
     updateActivity();
 }
 
@@ -1359,6 +1459,15 @@ void WebServerManager::handleSWDFlashProgress(AsyncWebServerRequest* request) {
     } else {
         doc["status"] = "idle";
     }
+
+    // Append new log lines since last poll
+    JsonArray logArr = doc["log"].to<JsonArray>();
+    int readIdx = (int)s_swdLogReadIndex;
+    int count = (int)s_swdLogCount;
+    for (int i = readIdx; i < count && i < SWD_LOG_MAX_LINES; i++) {
+        logArr.add(s_swdLogLines[i]);
+    }
+    s_swdLogReadIndex = count;
 
     sendJSON(request, doc);
 }
@@ -1837,6 +1946,17 @@ void WebServerManager::handleGPIOReset(AsyncWebServerRequest* request) {
     gpioControl.resetRAK();
     sendSuccess(request, "RAK reset");
     updateActivity();
+}
+
+void WebServerManager::handleGPIOHardReset(AsyncWebServerRequest* request) {
+    sendSuccess(request, "Hard reset initiated (2s hold)");
+    updateActivity();
+    // Run in a one-shot task to avoid blocking the async web server
+    xTaskCreate([](void*) {
+        delay(100);  // Let the HTTP response flush
+        gpioControl.hardResetRAK(2000);
+        vTaskDelete(nullptr);
+    }, "hardRst", 2048, nullptr, 1, nullptr);
 }
 
 void WebServerManager::handleGPIODFU(AsyncWebServerRequest* request) {

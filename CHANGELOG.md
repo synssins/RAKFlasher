@@ -13,6 +13,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Batch firmware flashing for multiple devices
 - Advanced SWD debugging features
 
+## [1.2.5] - 2026-03-03
+
+### Fixed
+- **SWD mass erase**: Root cause was stale SWD bus state after backup operations — AP reads returned all zeros, making erase appear to succeed instantly. Now always performs fresh `connect()` before erase/flash operations
+- **SWD mass erase diagnostics**: `massErase()` now logs detailed diagnostic output (NVMC state, register readbacks, timing) to the Recovery page terminal
+- **SWD flash verification**: `flashFromFile()` and `flashData()` spot-verify each 4KB chunk after writing
+- **Meshtastic console timeout**: Added 20s client-side polling timeout to prevent infinite "Waiting for response..."
+
+### Added
+- **Async erase with progress**: Mass erase runs as a background FreeRTOS task with progress polling (like backup/flash)
+- **Recovery terminal improvements**: Auto-scroll toggle, Export log to file, Clear log button
+- **RAK Module Control section**: Reset, Hard Reset (2s hold), and Enter DFU Mode buttons on Recovery page
+- **Hard reset**: Holds RESET LOW for 2 seconds to force peripheral power-down (W5500 Ethernet, etc.)
+
+### Note
+- Full power cycle of the RAK module may still be needed to clear W5500 Ethernet state after erase — the hard reset feature is under testing
+
 ## [1.2.4] - 2026-03-03
 
 ### Fixed

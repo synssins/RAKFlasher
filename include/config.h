@@ -9,7 +9,7 @@
 // Firmware version — FIRMWARE_VERSION is the semantic version (manually bumped),
 // BUILD_NUMBER auto-increments with every build via tools/version_increment.py,
 // BUILD_DATE and BUILD_TIME are set automatically by the compiler.
-#define FIRMWARE_VERSION "1.2.4"
+#define FIRMWARE_VERSION "1.2.5"
 #define PROJECT_NAME "ESP32-RAKFlasher"
 #define BUILD_DATE __DATE__   // e.g. "Mar  3 2026"
 #define BUILD_TIME __TIME__   // e.g. "14:30:05"

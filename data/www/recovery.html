@@ -67,6 +67,30 @@
             </div>
         </div>
 
+        <!-- RAK Module Reset -->
+        <div class="card">
+            <h3 class="card-title">RAK Module Control</h3>
+            <p class="card-subtitle">Reset or power-cycle the RAK4631 module remotely</p>
+
+            <div class="flex justify-between items-center mb-2" style="gap: 0.5rem; flex-wrap: wrap;">
+                <button class="btn btn-warning" onclick="resetRAKModule()" id="reset-btn">
+                    🔄 Reset Module
+                </button>
+                <button class="btn btn-danger" onclick="hardResetRAKModule()" id="hard-reset-btn">
+                    ⚡ Hard Reset (2s hold)
+                </button>
+                <button class="btn btn-secondary" onclick="enterDFUMode()" id="dfu-btn">
+                    🔧 Enter DFU Mode
+                </button>
+            </div>
+
+            <div class="alert alert-info mt-2" style="font-size: 0.875rem;">
+                <strong>Reset:</strong> Quick pulse on RESET pin (~100ms).
+                <strong>Hard Reset:</strong> Holds RESET LOW for 2 seconds — forces all peripherals (including Ethernet) to fully power down.
+                <strong>DFU:</strong> Double-tap reset to enter the Adafruit bootloader.
+            </div>
+        </div>
+
         <!-- Firmware Backup -->
         <div class="card">
             <h3 class="card-title">Firmware Backup</h3>
@@ -147,7 +171,14 @@
             </div>
             <p id="recovery-status" class="text-center mt-2">Processing...</p>
 
-            <div class="terminal" id="recovery-log"></div>
+            <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-bottom:0.25rem;">
+                <label style="display:flex; align-items:center; gap:0.25rem; font-size:0.75rem; color:#aaa;">
+                    <input type="checkbox" id="log-autoscroll" checked style="margin:0;"> Auto-scroll
+                </label>
+                <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.7rem;" onclick="exportLog()">Export</button>
+                <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.7rem;" onclick="clearLog()">Clear</button>
+            </div>
+            <div class="terminal" id="recovery-log" style="max-height:400px; overflow-y:auto;"></div>
         </div>
 
         <!-- Pin Configuration -->
@@ -233,14 +264,21 @@
                 addRecoveryLog('Reconnected — operation still in progress');
 
                 // Determine which endpoint to poll based on message content
-                const isFlash = (swdOp.message || '').toLowerCase().includes('writ');
-                const url = isFlash ? '/api/swd/flash/progress' : '/api/swd/backup/progress';
+                const msg = (swdOp.message || '').toLowerCase();
+                const isFlash = msg.includes('flash') || msg.includes('writ');
+                const isErase = msg.includes('eras');
+                const url = isErase ? '/api/swd/erase/progress' :
+                            isFlash ? '/api/swd/flash/progress' : '/api/swd/backup/progress';
 
                 pollSWDProgress(url, (data) => {
+                    // Consume any log lines
+                    if (data.log && data.log.length > 0) {
+                        data.log.forEach(line => addRecoveryLog(line));
+                    }
                     if (data.status === 'complete') {
                         swdPollingActive = false;
                         swdResumeHandled = true;
-                        if (!isFlash) {
+                        if (!isFlash && !isErase) {
                             lastBackupFile = data.filename || '';
                             const sizeStr = data.fileSize ?
                                 (data.fileSize / 1024).toFixed(0) + ' KB' : '?';
@@ -251,9 +289,10 @@
                             document.getElementById('download-btn').disabled = false;
                         document.getElementById('flash-backup-btn').disabled = false;
                         }
-                        updateRecoveryProgress(100, isFlash ? 'Flash complete!' : 'Backup complete!');
-                        addRecoveryLog(isFlash ? 'Flash completed successfully!' : 'Backup complete: ' + (data.filename || ''));
-                        showAlert(isFlash ? 'Flash completed!' : 'Backup complete! Click Download to save.', 'success');
+                        const doneMsg = isErase ? 'Erase verified!' : isFlash ? 'Flash complete!' : 'Backup complete!';
+                        updateRecoveryProgress(100, doneMsg);
+                        addRecoveryLog(isErase ? 'Mass erase verified!' : isFlash ? 'Flash completed successfully!' : 'Backup complete: ' + (data.filename || ''));
+                        showAlert(isErase ? 'Mass erase completed.' : isFlash ? 'Flash completed!' : 'Backup complete! Click Download to save.', 'success');
                         return true;
                     } else if (data.status === 'error') {
                         swdPollingActive = false;
@@ -292,6 +331,53 @@
                 }
             }
         });
+
+        // ── RAK Module Control ─────────────────────────────────────────
+        async function resetRAKModule() {
+            const btn = document.getElementById('reset-btn');
+            btn.disabled = true;
+            try {
+                await apiPost('/api/gpio/reset', {});
+                addRecoveryLog('RAK module reset (quick pulse)');
+                showAlert('RAK module reset', 'success');
+            } catch (error) {
+                addRecoveryLog('ERROR: Reset failed - ' + error.message);
+                showAlert('Reset failed: ' + error.message, 'danger');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function hardResetRAKModule() {
+            const btn = document.getElementById('hard-reset-btn');
+            btn.disabled = true;
+            try {
+                addRecoveryLog('Hard reset: holding RESET LOW for 2 seconds...');
+                await apiPost('/api/gpio/hard-reset', {});
+                addRecoveryLog('Hard reset complete — module should be fully power-cycled');
+                showAlert('Hard reset complete', 'success');
+            } catch (error) {
+                addRecoveryLog('ERROR: Hard reset failed - ' + error.message);
+                showAlert('Hard reset failed: ' + error.message, 'danger');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function enterDFUMode() {
+            const btn = document.getElementById('dfu-btn');
+            btn.disabled = true;
+            try {
+                await apiPost('/api/gpio/dfu', {});
+                addRecoveryLog('DFU mode activated (double-tap reset)');
+                showAlert('DFU mode activated', 'success');
+            } catch (error) {
+                addRecoveryLog('ERROR: DFU mode failed - ' + error.message);
+                showAlert('DFU mode failed: ' + error.message, 'danger');
+            } finally {
+                btn.disabled = false;
+            }
+        }
 
         // ── SWD Connection ───────────────────────────────────────────
         async function testConnection() {
@@ -419,6 +505,9 @@
 
                 // Poll for progress
                 await pollSWDProgress('/api/swd/flash/progress', (data) => {
+                    if (data.log && data.log.length > 0) {
+                        data.log.forEach(line => addRecoveryLog(line));
+                    }
                     if (data.status === 'complete') {
                         updateRecoveryProgress(100, 'Flash complete!');
                         addRecoveryLog('Firmware restored successfully!');
@@ -453,15 +542,36 @@
             eraseBtn.disabled = true;
             document.getElementById('operation-progress').classList.remove('hidden');
 
+            // Suppress stale completed state from previous operations
+            swdResumeHandled = true;
+            swdPollingActive = false;
+
             try {
                 addRecoveryLog('Starting mass erase...');
-                updateRecoveryProgress(10, 'Erasing...');
+                updateRecoveryProgress(5, 'Initiating erase...');
 
                 await apiPost('/api/swd/erase', {});
+                addRecoveryLog('Erase task started...');
 
-                updateRecoveryProgress(100, 'Mass erase complete');
-                addRecoveryLog('Mass erase completed successfully!');
-                showAlert('Mass erase completed. You can now flash firmware.', 'success');
+                // Poll for progress with detailed log
+                await pollSWDProgress('/api/swd/erase/progress', (data) => {
+                    // Consume log lines from server
+                    if (data.log && data.log.length > 0) {
+                        data.log.forEach(line => addRecoveryLog(line));
+                    }
+
+                    if (data.status === 'complete') {
+                        updateRecoveryProgress(100, data.message || 'Erase verified');
+                        addRecoveryLog('Mass erase completed and verified!');
+                        showAlert('Mass erase completed. Flash is confirmed empty.', 'success');
+                        return true;
+                    } else if (data.status === 'error') {
+                        throw new Error(data.error || 'Erase failed');
+                    } else {
+                        updateRecoveryProgress(data.progress || 0, data.message || 'Erasing...');
+                        return false;
+                    }
+                });
             } catch (error) {
                 addRecoveryLog('ERROR: ' + error.message);
                 showAlert('Mass erase failed: ' + error.message, 'danger');
@@ -523,6 +633,9 @@
 
                 // Step 3: Poll for progress
                 await pollSWDProgress('/api/swd/flash/progress', (data) => {
+                    if (data.log && data.log.length > 0) {
+                        data.log.forEach(line => addRecoveryLog(line));
+                    }
                     if (data.status === 'complete') {
                         updateRecoveryProgress(100, 'Flash complete!');
                         addRecoveryLog('Firmware flashed successfully!');
@@ -596,7 +709,26 @@
             line.className = 'terminal-line';
             line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
             log.appendChild(line);
-            log.scrollTop = log.scrollHeight;
+            if (document.getElementById('log-autoscroll').checked) {
+                log.scrollTop = log.scrollHeight;
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('recovery-log').innerHTML = '';
+        }
+
+        function exportLog() {
+            const log = document.getElementById('recovery-log');
+            const lines = Array.from(log.querySelectorAll('.terminal-line'))
+                .map(el => el.textContent).join('\n');
+            const blob = new Blob([lines], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'recovery-log-' + new Date().toISOString().slice(0,19).replace(/:/g,'-') + '.txt';
+            a.click();
+            URL.revokeObjectURL(url);
         }
     </script>
 </body>

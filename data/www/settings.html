@@ -305,6 +305,18 @@
             <h2 class="card-title">What's New</h2>
 
             <div style="margin-bottom: 1.25rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--primary-color);">v1.2.5</h3>
+                <ul style="margin: 0; padding-left: 1.25rem; line-height: 1.8; font-size: 0.9rem;">
+                    <li>Fixed SWD mass erase &mdash; stale bus state after backup caused silent failures</li>
+                    <li>Mass erase now shows detailed diagnostic log in Recovery terminal</li>
+                    <li>Erase runs as async background task with progress polling</li>
+                    <li>Recovery terminal: auto-scroll toggle, export log, clear log</li>
+                    <li>RAK Module Control: Reset, Hard Reset (2s hold), Enter DFU buttons</li>
+                    <li>Meshtastic console 20s polling timeout</li>
+                </ul>
+            </div>
+
+            <div style="margin-bottom: 1.25rem;">
                 <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--primary-color);">v1.2.4</h3>
                 <ul style="margin: 0; padding-left: 1.25rem; line-height: 1.8; font-size: 0.9rem;">
                     <li>TCP bridge no longer hangs after Meshtastic CLI commands (60s timeout + flush)</li>
