@@ -123,10 +123,6 @@ private:
     uint32_t            m_baudRate;
     unsigned long       m_activeStartTime;
 
-    // --- TCP bridge state ---
-    unsigned long m_tcpLastActivity;
-    static const unsigned long TCP_TIMEOUT_MS = 60000;   // 60 s inactivity
-
     // --- HTTP bridge state ---
     unsigned long m_httpLastActivity;
     static const unsigned long HTTP_TIMEOUT_MS = 30000;  // 30 s inactivity

@@ -319,10 +319,9 @@
             if (!text) return;
             input.value = '';
 
-            if (text.toLowerCase() === 'help' || text === '?') {
+            if (text.toLowerCase() === 'help') {
                 appendOutput('> help', 'cmd-echo');
-                const helpLines = MeshDecoder.getHelpText();
-                helpLines.forEach(line => appendOutput(line, ''));
+                appendOutput(MeshDecoder.getHelp(), '');
                 return;
             }
 
@@ -338,25 +337,14 @@
                 return;
             }
 
-            // Handle string returns from parseCommand
-            if (parsed === 'GET_ALL_CHANNELS') {
+            // Handle special multi-command "get channels"
+            if (parsed.multi === 'channels') {
                 appendOutput('> ' + text, 'cmd-echo');
                 getAllChannels();
                 return;
             }
-            if (parsed === 'HELP') {
-                appendOutput('> help', 'cmd-echo');
-                const helpLines = MeshDecoder.getHelpText();
-                helpLines.forEach(line => appendOutput(line, ''));
-                return;
-            }
 
-            // For "get channel N", pass index as the type parameter
-            const typeParam = parsed.type !== undefined ? parsed.type :
-                              parsed.index !== undefined ? parsed.index :
-                              parsed.seconds !== undefined ? parsed.seconds :
-                              undefined;
-            runCmd(parsed.command, typeParam);
+            runCmd(parsed.command, parsed.type);
         }
 
         // Get all 8 channels sequentially

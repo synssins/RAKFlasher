@@ -13,8 +13,6 @@
 *.elf
 *.map
 build_output.txt
-build_out.txt
-build_err.txt
 
 # Auto-generated headers
 include/build_info.h
