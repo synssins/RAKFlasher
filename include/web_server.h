@@ -84,7 +84,6 @@ private:
     static void handleSWDConnect(AsyncWebServerRequest* request);
     static void handleSWDInfo(AsyncWebServerRequest* request);
     static void handleSWDErase(AsyncWebServerRequest* request);
-    static void handleSWDFlash(AsyncWebServerRequest* request);
 
     // SWD firmware backup
     static void handleSWDBackup(AsyncWebServerRequest* request);

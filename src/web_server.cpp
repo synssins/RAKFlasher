@@ -531,7 +531,9 @@ void WebServerManager::setupRoutes() {
     m_server->on("/api/swd/connect", HTTP_GET, handleSWDConnect);
     m_server->on("/api/swd/info", HTTP_GET, handleSWDInfo);
     m_server->on("/api/swd/erase", HTTP_POST, handleSWDErase);
-    m_server->on("/api/swd/flash", HTTP_POST, handleSWDFlash);
+    // NOTE: Do NOT register a catch-all "/api/swd/flash" here — ESPAsyncWebServer
+    // uses prefix matching (uri + "/") so it would swallow /flash/upload,
+    // /flash/start, /flash/from-backup, and /flash/progress sub-routes.
     m_server->on("/api/swd/backup", HTTP_POST, handleSWDBackup);
     m_server->on("/api/swd/backup/progress", HTTP_GET, handleSWDBackupProgress);
     m_server->on("/api/swd/backup/download", HTTP_GET, handleSWDBackupDownload);
@@ -1212,11 +1214,6 @@ void WebServerManager::handleSWDErase(AsyncWebServerRequest* request) {
     }
 
     setSystemState(STATE_IDLE);
-    updateActivity();
-}
-
-void WebServerManager::handleSWDFlash(AsyncWebServerRequest* request) {
-    sendError(request, "Use /api/swd/flash/upload + /api/swd/flash/start instead");
     updateActivity();
 }
 
